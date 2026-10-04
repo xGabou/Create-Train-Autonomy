@@ -308,7 +308,7 @@ public final class TrainControllerPeripheral implements IPeripheral {
                 () ->
                         external()
                                 .setActorTypeEnabled(
-                                        net.minecraft.resources.ResourceLocation.parse(id),
+                                        new net.minecraft.resources.ResourceLocation(id),
                                         enabled));
     }
 
@@ -318,6 +318,6 @@ public final class TrainControllerPeripheral implements IPeripheral {
                 () ->
                         controller()
                                 .isActorTypeEnabled(
-                                        net.minecraft.resources.ResourceLocation.parse(id)));
+                                        new net.minecraft.resources.ResourceLocation(id)));
     }
 }

@@ -1,12 +1,16 @@
 # Create Train Automation
 
-A general purpose train control and automation framework for **Minecraft 1.21.1, NeoForge, and Create 6.0.10**. Mining is the first registered automation profile; the controller, movement, inventory, schedules, events, and ownership APIs contain no mining rules.
+A general purpose train control and automation framework for **Minecraft 1.20.1, Forge, and Create 6.0.8**. Mining is the first registered automation profile; the controller, movement, inventory, schedules, events, and ownership APIs contain no mining rules.
 
 The existing `createtrainmining` namespace is retained for compatibility. The mod and block are displayed as **Create Train Automation** and **Train Automation Controller**.
 
 ## Build and run
 
-Java 21 is required; Gradle uses the configured Java toolchain.
+Java 17 is required; Gradle uses the configured Java toolchain.
+
+This branch targets Forge 47.4.0 and Create 6.0.8, using the dependencies from
+[Create's Forge 1.20.1 development guide](https://wiki.createmod.net/developers/depend-on-create/forge-1.20.1).
+Development runs use `run-1.20.1/` for their worlds and configuration.
 
 ```powershell
 .\gradlew.bat build
@@ -22,7 +26,7 @@ The default development runtime includes Create and its normal libraries. Addons
 .\gradlew.bat runGameTestServer -PwithComputerCraft=true -PwithAdditionalLogistics=true -PwithRailwaysAdditions=true
 ```
 
-Create is resolved from its official Maven repository as `create-1.21.1:6.0.10-280:slim`, the 6.0.10 build at release commit `ac0c444d9828da3453ae8cc65338e8de063286fb`. It is not installed twice through CurseMaven. Optional runtimes use CC:Tweaked `maven.modrinth:gu7yAYhd:1ewzHZYg`, Additional Logistics `7460280`, and Railways Additions `8407753`. CC's APIs are compile-only; core train lookup, inventory and schedules require neither CC nor Additional Logistics.
+Create is resolved from its official Maven repository as `create-1.20.1:6.0.8-280:slim`, the 6.0.8 build at release commit `ac0c444d9828da3453ae8cc65338e8de063286fb`. It is not installed twice through CurseMaven. Optional runtimes use CC:Tweaked `maven.modrinth:gu7yAYhd:1ewzHZYg`, Additional Logistics `7460280`, and Railways Additions `8407753`. CC's APIs are compile-only; core train lookup, inventory and schedules require neither CC nor Additional Logistics.
 
 The distributable jar is in `build/libs`. Development GameTests and their empty structure are excluded from the jar.
 
@@ -75,7 +79,7 @@ DriveBackendRegistry.register("myaddon:drive", MyDriveBackend::new);
 
 Each controller receives its own profile and backend instance. Profiles access `AutomationContext` and `TrainController`; they do not receive a raw Create `Train`. Raw train access is confined to the adapter SPI and implementation. Profile state is serialized through `serializeState`/`deserializeState`; profile-owned `persistentData` changes should call `context.markDirty()`.
 
-`AutomationEvent` is published on the NeoForge event bus for selection, direct drive start/stop, schedule start, arrivals, cargo changes, profile state changes and errors. Cargo change detection uses Create's storage version, with a periodic content check for external storage handlers.
+`AutomationEvent` is published on the Forge event bus for selection, direct drive start/stop, schedule start, arrivals, cargo changes, profile state changes and errors. Cargo change detection uses Create's storage version, with a periodic content check for external storage handlers.
 
 ## Ownership and recovery
 
@@ -95,9 +99,13 @@ Only `automation/mining` contains the mining workflow:
 
 Select a train with cargo storage and a conductor, choose `mining`, and configure its return station. The profile drives stationlessly in its configured outbound direction. At the return threshold it switches to a normal Create station schedule. At the station it waits for the unload threshold, then resumes outbound direct motion when automatic resume is enabled.
 
-Configuration keys are `return_station`, `return_threshold`, `unload_threshold`, `mining_speed`, `outbound_direction`, `automatic_resume`, and `track_deployer_control`. Thresholds and speed use fractions. The unload threshold must be below a positive return threshold. The return station is not hardcoded.
+Configuration keys are `return_station`, `return_threshold`, `unload_threshold`, `mining_speed`, `outbound_direction`, `automatic_resume`, `track_deployer_control`, `pause_tools_on_slopes`, and `slope_lookahead`. Thresholds and speed use fractions. The unload threshold must be below a positive return threshold. The return station is not hardcoded.
 
 The optional deployer setting controls the Create deployer actor type on loaded carriages, including all deployers that support that actor filter; it does not infer which deployers are holding track. It defaults to disabled. The profile remembers the previous aggregate enabled state for stop cleanup. Contraption-wide actor disabling remains authoritative. The profile waits at the current track end so actors can extend the route.
+
+**Pause Tools on Slopes** is enabled by default in the mining profile's advanced settings (gear button). It temporarily pauses all Create deployers and mechanical drills when sloped track is ahead or under any carriage, while continuing to drive. **Slope Lookahead** defaults to 8 blocks and accepts 2–64 blocks, measured beyond the carriage/tool reach. Scouts sample track elevation, including curved slopes, in either mining direction. Tools resume after the rear carriage and its overhanging tools clear the slope. The controller shows **Slope: tools paused** during the crossing. No additional Contraption Controls block is required.
+
+Slope pauses use Create's actor-disable behavior with separate client synchronization. They preserve saved Contraption Controls filters, so manually disabled tools stay disabled afterward. Stopping, unloading, player takeover, and errors release temporary overrides; resumed automation checks the track again. This protection operates during outbound mining on the existing track graph; it cannot anticipate slopes that have not been built yet, and it does not remove blocks already placed in the way.
 
 ## CC:Tweaked
 
@@ -121,7 +129,7 @@ controller.goToStation("MINING")
 
 Other operations include `getTrains`, `getTrain`, `getProfiles`, `getConfigurationSchema`, `getStations`, `getInventory`, `getInventoryStats`, `setSpeed`, `setDirection`, `clearSchedule`, `pauseSchedule`, `resumeSchedule`, `getDriveBackends`, `setDriveBackend`, `getActorTypes`, `setActorEnabled`, `isActorEnabled`, and `getLastError`. Cargo is read-only; returned inventory slots use Lua's 1-based numbering.
 
-Railways Additions 1.0.1a exposes `railways_additions` as an alternative backend. It engages the addon's Cruise Control manager and honors disengagement while retaining the native steering/signal/track-end envelope. An optional mixin prevents the addon manager from applying a second acceleration tick to owned trains. Unmanaged addon cruises retain their normal behavior. Controller speed/direction remain authoritative.
+Railways Additions 1.0.1 exposes `railways_additions` as an alternative backend. It engages the addon's Cruise Control manager and honors disengagement while retaining the native steering/signal/track-end envelope. An optional mixin prevents the addon manager from applying a second acceleration tick to owned trains. Unmanaged addon cruises retain their normal behavior. Controller speed/direction remain authoritative.
 
 ## Verification and current limits
 

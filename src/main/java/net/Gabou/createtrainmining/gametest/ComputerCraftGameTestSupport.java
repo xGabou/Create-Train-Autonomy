@@ -1,7 +1,7 @@
 package net.Gabou.createtrainmining.gametest;
 
 import dan200.computercraft.api.lua.LuaException;
-import dan200.computercraft.api.peripheral.PeripheralCapability;
+import net.Gabou.createtrainmining.compat.computercraft.ComputerCraftIntegration;
 
 import net.Gabou.createtrainmining.compat.computercraft.TrainControllerPeripheral;
 import net.Gabou.createtrainmining.core.TrainController;
@@ -14,7 +14,7 @@ import net.minecraft.server.level.ServerLevel;
 final class ComputerCraftGameTestSupport {
     static void verify(
             GameTestHelper helper, ServerLevel level, BlockPos pos, TrainController controller) {
-        var peripheral = level.getCapability(PeripheralCapability.get(), pos, Direction.UP);
+        var peripheral = level.getBlockEntity(pos).getCapability(ComputerCraftIntegration.PERIPHERAL, Direction.UP).orElse(null);
         helper.assertTrue(
                 peripheral instanceof TrainControllerPeripheral
                         && peripheral.getType().equals("train_automation_controller"),

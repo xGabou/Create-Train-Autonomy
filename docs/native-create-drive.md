@@ -1,5 +1,9 @@
 # Native stationless Create drive: source trace
 
+This is the original 1.21.1 implementation research. The Forge 1.20.1 branch
+adapts the backend to Create 6.0.8-289; its existing movement, signal, schedule,
+inventory, and ownership GameTests also run against that version.
+
 Inspected the source jar for `com.simibubi.create:create-1.21.1:6.0.10-280` before implementing the backend. Server startup confirms Create reports release commit `ac0c444d9828da3453ae8cc65338e8de063286fb`. The release source can be reviewed at [Create 6.0.10](https://github.com/Creators-of-Create/Create/tree/mc1.21.1-6.0.10). Source snapshots and bytecode inspection outputs used during development are under the ignored `build/reference` directory.
 
 ## Manual control path

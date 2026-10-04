@@ -93,8 +93,8 @@ public class NativeCreateDriveBackend implements TrainDriveBackend {
         if (motionSign != requestedSign) desired = 0;
         var leading =
                 motionSign > 0
-                        ? train.carriages.getFirst().getLeadingPoint()
-                        : train.carriages.getLast().getTrailingPoint();
+                        ? train.carriages.get(0).getLeadingPoint()
+                        : train.carriages.get(train.carriages.size() - 1).getTrailingPoint();
         if (leading.edge == null || leading.node1 == null || leading.node2 == null)
             throw new IllegalStateException("Train has no valid travelling point");
         releaseReservations(train);

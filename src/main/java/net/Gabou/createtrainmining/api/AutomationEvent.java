@@ -1,10 +1,10 @@
 package net.Gabou.createtrainmining.api;
 
-import net.neoforged.bus.api.Event;
+import net.minecraftforge.eventbus.api.Event;
 
 import java.util.UUID;
 
-/** Published on NeoForge.EVENT_BUS on the server thread. */
+/** Published on MinecraftForge.EVENT_BUS on the server thread. */
 public final class AutomationEvent extends Event {
     public enum Type {
         TRAIN_SELECTED,

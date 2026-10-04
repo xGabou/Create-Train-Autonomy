@@ -3,7 +3,7 @@ package net.Gabou.createtrainmining.gametest;
 import com.mojang.blaze3d.platform.NativeImage;
 import com.simibubi.create.foundation.gui.widget.IconButton;
 import com.simibubi.create.foundation.gui.widget.ScrollInput;
-import net.createmod.catnip.gui.element.GuiGameElement;
+
 import net.Gabou.createtrainmining.Createtrainmining;
 import net.Gabou.createtrainmining.automation.mining.MiningConfiguration;
 import net.Gabou.createtrainmining.block.ControllerLamp;
@@ -11,6 +11,7 @@ import net.Gabou.createtrainmining.block.ModBlocks;
 import net.Gabou.createtrainmining.block.TrainAutomationControllerBlock;
 import net.Gabou.createtrainmining.client.ControllerScreen;
 import net.Gabou.createtrainmining.network.ControllerMenu;
+import net.createmod.catnip.gui.element.GuiGameElement;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.Screenshot;
 import net.minecraft.client.gui.GuiGraphics;
@@ -22,10 +23,10 @@ import net.minecraft.core.Direction;
 import net.minecraft.nbt.*;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.player.Inventory;
-import net.neoforged.api.distmarker.Dist;
-import net.neoforged.bus.api.SubscribeEvent;
-import net.neoforged.fml.common.EventBusSubscriber;
-import net.neoforged.neoforge.client.event.ClientTickEvent;
+import net.minecraftforge.api.distmarker.Dist;
+import net.minecraftforge.eventbus.api.SubscribeEvent;
+import net.minecraftforge.fml.common.Mod.EventBusSubscriber;
+import net.minecraftforge.event.TickEvent;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -37,10 +38,14 @@ public final class ControllerVisualPreview {
     private static boolean started;
 
     @SubscribeEvent
-    public static void tick(ClientTickEvent.Post event) {
+    public static void tick(TickEvent.ClientTickEvent event) {
+        if (event.phase != TickEvent.Phase.END) return;
         var mc = Minecraft.getInstance();
-        if (!started && Boolean.getBoolean("createtrainmining.visualPreview")
-                && mc.screen instanceof TitleScreen && mc.getOverlay() == null) {
+        if (!started
+                && Boolean.getBoolean("createtrainmining.visualPreview")
+                && (mc.screen instanceof TitleScreen
+                        || mc.screen instanceof net.minecraft.client.gui.screens.AccessibilityOnboardingScreen)
+                && mc.getOverlay() == null) {
             started = true;
             mc.setScreen(new Preview());
         }
@@ -50,12 +55,24 @@ public final class ControllerVisualPreview {
         private ControllerScreen controller;
         private int stage, frames;
         private final int previousScale = Minecraft.getInstance().options.guiScale().get();
-        private static final String[] NAMES = {"auto-stopped", "scale-2-running", "scale-3-waiting",
-                "scale-4-error-tooltip", "scale-4-long-train-tooltip", "advanced", "manual",
-                "overflow-page-2", "custom-station-edit", "empty", "cabinet-models"};
+        private static final String[] NAMES = {
+            "auto-stopped",
+            "scale-2-running",
+            "scale-3-waiting",
+            "scale-4-error-tooltip",
+            "scale-4-long-train-tooltip",
+            "advanced",
+            "manual",
+            "overflow-page-2",
+            "custom-station-edit",
+            "empty",
+            "cabinet-models"
+        };
         private boolean initialized;
 
-        Preview() { super(Component.literal("Controller presentation fixtures")); }
+        Preview() {
+            super(Component.literal("Controller presentation fixtures"));
+        }
 
         @Override
         protected void init() {
@@ -71,8 +88,12 @@ public final class ControllerVisualPreview {
             minecraft.options.guiScale().set(scale);
             minecraft.resizeDisplay();
             var inventory = new Inventory(null);
-            controller = new ControllerScreen(new ControllerMenu(0, inventory, BlockPos.ZERO), inventory,
-                    Component.translatable("block.createtrainmining.train_automation_controller"));
+            controller =
+                    new ControllerScreen(
+                            new ControllerMenu(0, inventory, BlockPos.ZERO),
+                            inventory,
+                            Component.translatable(
+                                    "block.createtrainmining.train_automation_controller"));
             controller.init(minecraft, width, height);
             CompoundTag data = fixture();
             if (stage == 1) {
@@ -91,17 +112,26 @@ public final class ControllerVisualPreview {
             if (stage == 3) {
                 data.putString("Mode", "ERROR");
                 data.putString("State", "ERROR");
-                data.putString("Error", "Return station could not be reached: Northern Mountain Railway Storage and Maintenance Terminus");
+                data.putString(
+                        "Error",
+                        "Return station could not be reached: Northern Mountain Railway Storage and"
+                            + " Maintenance Terminus");
             }
             if (stage == 4) {
-                data.putString("Train", "The Northern Mountain Railway Construction and Cargo Service Express");
-                data.getList("Trains", Tag.TAG_COMPOUND).getCompound(0).putString("Name", data.getString("Train"));
-                data.putString("Station", "Northern Mountain Railway Storage and Maintenance Terminus");
+                data.putString(
+                        "Train",
+                        "The Northern Mountain Railway Construction and Cargo Service Express");
+                data.getList("Trains", Tag.TAG_COMPOUND)
+                        .getCompound(0)
+                        .putString("Name", data.getString("Train"));
+                data.putString(
+                        "Station", "Northern Mountain Railway Storage and Maintenance Terminus");
                 data.putIntArray("CarriageLengths", new int[] {10, 8, 12, 4, 8, 10, 12, 5, 7, 9});
                 data.putBoolean("DoubleEnded", true);
             }
             if (stage == 7) {
                 data.putString("Profile", "preview:translated_profile");
+                data.put("Profiles", strings("mining", "preview:translated_profile"));
                 ListTag fields = new ListTag();
                 for (int i = 0; i < 17; i++) {
                     CompoundTag field = new CompoundTag();
@@ -122,39 +152,70 @@ public final class ControllerVisualPreview {
             if (stage == 7) click(246, 186);
             if (stage == 8) {
                 click(206, 61);
-                var input = controller.children().stream().filter(w -> w instanceof net.minecraft.client.gui.components.EditBox)
-                        .map(w -> (net.minecraft.client.gui.components.EditBox) w).findFirst().orElseThrow();
+                var input =
+                        controller.children().stream()
+                                .filter(
+                                        w ->
+                                                w
+                                                        instanceof
+                                                        net.minecraft.client.gui.components.EditBox)
+                                .map(w -> (net.minecraft.client.gui.components.EditBox) w)
+                                .findFirst()
+                                .orElseThrow();
                 input.setValue("NORTHERN_MOUNTAIN_*");
                 input.setFocused(true);
                 controller.setFocused(input);
                 data.putDouble("Inventory", .64);
                 controller.receive(data);
-                if (!input.getValue().equals("NORTHERN_MOUNTAIN_*")) throw new IllegalStateException("Status update destroyed an edit");
+                if (!input.getValue().equals("NORTHERN_MOUNTAIN_*"))
+                    throw new IllegalStateException("Status update destroyed an edit");
             }
             for (var listener : controller.children()) {
-                if (listener instanceof AbstractWidget widget && widget.visible
-                        && (widget.getX() < controller.getGuiLeft() || widget.getY() < controller.getGuiTop()
-                        || widget.getX() + widget.getWidth() > controller.getGuiLeft() + ControllerScreen.PANEL_WIDTH
-                        || widget.getY() + widget.getHeight() > controller.getGuiTop() + ControllerScreen.PANEL_HEIGHT))
-                    throw new IllegalStateException("Widget escapes controller frame: " + widget.getMessage());
+                if (listener instanceof AbstractWidget widget
+                        && widget.visible
+                        && (widget.getX() < controller.getGuiLeft()
+                                || widget.getY() < controller.getGuiTop()
+                                || widget.getX() + widget.getWidth()
+                                        > controller.getGuiLeft() + ControllerScreen.PANEL_WIDTH
+                                || widget.getY() + widget.getHeight()
+                                        > controller.getGuiTop() + ControllerScreen.PANEL_HEIGHT))
+                    throw new IllegalStateException(
+                            "Widget escapes controller frame: " + widget.getMessage());
             }
             if (stage == 0) {
-                ScrollInput number = controller.children().stream().filter(w -> w instanceof ScrollInput input
-                        && input.getX() == controller.getGuiLeft() + 226 && input.getY() == controller.getGuiTop() + 82)
-                        .map(w -> (ScrollInput) w).findFirst().orElseThrow();
+                ScrollInput number =
+                        controller.children().stream()
+                                .filter(
+                                        w ->
+                                                w instanceof ScrollInput input
+                                                        && input.getX()
+                                                                == controller.getGuiLeft() + 226
+                                                        && input.getY()
+                                                                == controller.getGuiTop() + 82)
+                                .map(w -> (ScrollInput) w)
+                                .findFirst()
+                                .orElseThrow();
                 int prior = number.getState();
-                number.mouseScrolled(number.getX() + 1, number.getY() + 1, 0, 1);
+                number.mouseScrolled(number.getX() + 1, number.getY() + 1, 1);
                 controller.receive(data);
-                if (number.getState() != prior + 1) throw new IllegalStateException("Status update reset a scroll edit");
+                if (number.getState() != prior + 1)
+                    throw new IllegalStateException("Status update reset a scroll edit");
                 // Restore the fixture for the screenshot without recreating widgets.
                 number.setState(prior);
             }
         }
 
         private void click(int x, int y) {
-            controller.children().stream().filter(w -> w instanceof IconButton button
-                    && button.getX() == controller.getGuiLeft() + x && button.getY() == controller.getGuiTop() + y)
-                    .map(w -> (IconButton) w).findFirst().orElseThrow().onClick(0, 0);
+            controller.children().stream()
+                    .filter(
+                            w ->
+                                    w instanceof IconButton button
+                                            && button.getX() == controller.getGuiLeft() + x
+                                            && button.getY() == controller.getGuiTop() + y)
+                    .map(w -> (IconButton) w)
+                    .findFirst()
+                    .orElseThrow()
+                    .onClick(0, 0);
         }
 
         @Override
@@ -177,46 +238,110 @@ public final class ControllerVisualPreview {
             if (stage == 10) gallery(graphics);
             else {
                 int x = stage == 4 ? controller.getGuiLeft() + 25 : controller.getGuiLeft() + 20;
-                int y = stage == 3 ? controller.getGuiTop() + 214
-                        : stage == 4 ? controller.getGuiTop() + 50 : 0;
+                int y =
+                        stage == 3
+                                ? controller.getGuiTop() + 214
+                                : stage == 4 ? controller.getGuiTop() + 50 : 0;
                 controller.render(graphics, x, y, partial);
             }
             graphics.flush();
             frames++;
             if (frames == 20) {
-                Path output = minecraft.gameDirectory.toPath().resolve("../build/reference/presentation").normalize();
+                Path output =
+                        minecraft
+                                .gameDirectory
+                                .toPath()
+                                .resolve("../build/reference/presentation-1.20.1")
+                                .normalize();
                 try {
                     Files.createDirectories(output);
-                    try (NativeImage image = Screenshot.takeScreenshot(minecraft.getMainRenderTarget())) {
+                    try (NativeImage image =
+                            Screenshot.takeScreenshot(minecraft.getMainRenderTarget())) {
                         image.writeToFile(output.resolve(NAMES[stage] + ".png"));
                     }
-                    String report = NAMES[stage] + ": requested=" + minecraft.options.guiScale().get()
-                            + ", effective=" + minecraft.getWindow().getGuiScale() + ", viewport=" + width + "x" + height + "\n";
-                    Files.writeString(output.resolve("verification.txt"), report,
-                            java.nio.file.StandardOpenOption.CREATE, java.nio.file.StandardOpenOption.APPEND);
+                    String report =
+                            NAMES[stage]
+                                    + ": requested="
+                                    + minecraft.options.guiScale().get()
+                                    + ", effective="
+                                    + minecraft.getWindow().getGuiScale()
+                                    + ", viewport="
+                                    + width
+                                    + "x"
+                                    + height
+                                    + "\n";
+                    Files.writeString(
+                            output.resolve("verification.txt"),
+                            report,
+                            java.nio.file.StandardOpenOption.CREATE,
+                            java.nio.file.StandardOpenOption.APPEND);
                     System.out.print("PRESENTATION CHECK: " + report);
-                } catch (java.io.IOException exception) { throw new IllegalStateException(exception); }
+                } catch (java.io.IOException exception) {
+                    throw new IllegalStateException(exception);
+                }
             }
         }
 
         private void gallery(GuiGraphics graphics) {
-            graphics.drawString(font, "Cabinet: 4 lamp states x 4 horizontal facings", 12, 10, 0xdedbc9, false);
-            var directions = List.of(Direction.NORTH, Direction.EAST, Direction.SOUTH, Direction.WEST);
+            graphics.drawString(
+                    font, "Cabinet: 4 lamp states x 4 horizontal facings", 12, 10, 0xdedbc9, false);
+            var directions =
+                    List.of(Direction.NORTH, Direction.EAST, Direction.SOUTH, Direction.WEST);
             for (int lamp = 0; lamp < 4; lamp++) {
                 for (int facing = 0; facing < 4; facing++) {
                     int x = 18 + facing * 77, y = 42 + lamp * 48;
-                    var state = ModBlocks.CONTROLLER.get().defaultBlockState()
-                            .setValue(TrainAutomationControllerBlock.FACING, directions.get(facing))
-                            .setValue(TrainAutomationControllerBlock.LAMP, ControllerLamp.values()[lamp]);
-                    GuiGameElement.of(state).scale(26).rotateBlock(20, 45, 0).at(x + 24, y + 12).render(graphics);
-                    graphics.drawString(font, directions.get(facing).getSerializedName(), x + 5, y + 33, 0xaab3a2, false);
-                    if (frames == 0) System.out.println("PRESENTATION SPRITES: " + state + " "
-                            + minecraft.getBlockRenderer().getBlockModel(state)
-                            .getQuads(state, null, net.minecraft.util.RandomSource.create(0)).stream()
-                            .map(q -> q.getSprite().contents().name().toString()).distinct().toList());
+                    var state =
+                            ModBlocks.CONTROLLER
+                                    .get()
+                                    .defaultBlockState()
+                                    .setValue(
+                                            TrainAutomationControllerBlock.FACING,
+                                            directions.get(facing))
+                                    .setValue(
+                                            TrainAutomationControllerBlock.LAMP,
+                                            ControllerLamp.values()[lamp]);
+                    GuiGameElement.of(state)
+                            .scale(26)
+                            .rotateBlock(20, 45, 0)
+                            .at(x + 24, y + 12)
+                            .render(graphics);
+                    graphics.drawString(
+                            font,
+                            ControllerLamp.values()[lamp].getSerializedName()
+                                    + " "
+                                    + directions.get(facing).name().substring(0, 1),
+                            x,
+                            y + 23,
+                            0xaab3a2,
+                            false);
+                    if (frames == 0) {
+                        var sprites =
+                                minecraft
+                                        .getBlockRenderer()
+                                        .getBlockModel(state)
+                                        .getQuads(
+                                                state,
+                                                null,
+                                                net.minecraft.util.RandomSource.create(0))
+                                        .stream()
+                                        .map(q -> q.getSprite().contents().name().toString())
+                                        .distinct()
+                                        .toList();
+                        if (sprites.stream()
+                                .noneMatch(
+                                        sprite ->
+                                                sprite.endsWith(
+                                                        "controller_lamp_"
+                                                                + state.getValue(
+                                                                                TrainAutomationControllerBlock
+                                                                                        .LAMP)
+                                                                        .getSerializedName())))
+                            throw new IllegalStateException(
+                                    "Incorrect lamp model textures: " + state);
+                    }
                 }
             }
-            graphics.renderItem(ModBlocks.CONTROLLER_ITEM.toStack(), width - 24, 8);
+            graphics.renderItem(ModBlocks.CONTROLLER_ITEM.get().getDefaultInstance(), width - 24, 8);
         }
     }
 
@@ -236,7 +361,12 @@ public final class ControllerVisualPreview {
         tag.putDouble("SpeedRatio", .2);
         tag.put("Profiles", strings("mining"));
         tag.put("Backends", strings("native", "railways_additions"));
-        tag.put("Stations", strings("MINING", "Main Yard", "Northern Mountain Railway Storage and Maintenance Terminus"));
+        tag.put(
+                "Stations",
+                strings(
+                        "MINING",
+                        "Main Yard",
+                        "Northern Mountain Railway Storage and Maintenance Terminus"));
         ListTag trains = new ListTag();
         CompoundTag train = new CompoundTag();
         train.putString("Id", tag.getString("TrainId"));
@@ -253,7 +383,11 @@ public final class ControllerVisualPreview {
             f.putBoolean("Advanced", field.advanced());
             f.putDouble("Min", field.min());
             f.putDouble("Max", field.max());
-            f.putString("Value", field.key().equals("return_station") ? "MINING" : field.defaultValue().toString());
+            f.putString(
+                    "Value",
+                    field.key().equals("return_station")
+                            ? "MINING"
+                            : field.defaultValue().toString());
             f.put("Options", strings(field.options().toArray(String[]::new)));
             fields.add(f);
         }

@@ -6,14 +6,19 @@ import net.minecraft.resources.ResourceLocation;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /** First consumer of the generic facade. No direct Create object access. */
 public final class MiningAutomationProfile implements AutomationProfile {
     private MiningState state = MiningState.STOPPED;
     private Boolean previousDeployerEnabled;
-    private static final ResourceLocation DEPLOYER = ResourceLocation.parse("create:deployer");
+    private boolean slopePaused;
+    private static final ResourceLocation DEPLOYER = new ResourceLocation("create:deployer");
+    private static final Set<ResourceLocation> SLOPE_TOOLS = Set.of(
+            DEPLOYER, new ResourceLocation("create:mechanical_drill"));
 
     public void onStart(AutomationContext context) {
+        slopePaused = false;
         var cfg = MiningConfiguration.from(context.configuration());
         if (cfg.returnStation().isBlank() || !context.stations().contains(cfg.returnStation()))
             throw new IllegalArgumentException(
@@ -58,9 +63,11 @@ public final class MiningAutomationProfile implements AutomationProfile {
                                 false,
                                 true));
         state = MiningState.MINING;
+        beforeTrainTick(context);
     }
 
     public void onStop(AutomationContext context) {
+        clearSlopePause(context);
         context.controller().stopDriving();
         if (previousDeployerEnabled != null) {
             context.controller().setActorTypeEnabled(DEPLOYER, previousDeployerEnabled);
@@ -74,6 +81,23 @@ public final class MiningAutomationProfile implements AutomationProfile {
         if (cfg.trackDeployerControl()) context.controller().setActorTypeEnabled(DEPLOYER, enabled);
     }
 
+    public void beforeTrainTick(AutomationContext context) {
+        var cfg = MiningConfiguration.from(context.configuration());
+        boolean paused = state == MiningState.MINING && cfg.pauseToolsOnSlopes()
+                && context.controller().hasSlopeNearTrain(cfg.outboundDirection(), cfg.slopeLookahead());
+        if (paused != slopePaused) {
+            context.controller().setPausedActorTypes(paused ? SLOPE_TOOLS : Set.of());
+            slopePaused = paused;
+            context.markDirty();
+        }
+    }
+
+    private void clearSlopePause(AutomationContext context) {
+        if (!slopePaused) return;
+        context.controller().setPausedActorTypes(Set.of());
+        slopePaused = false;
+    }
+
     public void tick(AutomationContext context) {
         var cfg = MiningConfiguration.from(context.configuration());
         try {
@@ -81,6 +105,7 @@ public final class MiningAutomationProfile implements AutomationProfile {
                 case MINING -> {
                     if (context.inventory().getUsageRatio() >= cfg.returnThreshold()) {
                         context.controller().stopDriving();
+                        clearSlopePause(context);
                         setDeployers(context, cfg, false);
                         context.controller().goToStation(cfg.returnStation());
                         state = MiningState.RETURNING;
@@ -129,7 +154,7 @@ public final class MiningAutomationProfile implements AutomationProfile {
     }
 
     public String getStatus() {
-        return state.name();
+        return state == MiningState.MINING && slopePaused ? "SLOPE_PAUSED" : state.name();
     }
 
     public List<ConfigurationField> getConfigurationSchema() {

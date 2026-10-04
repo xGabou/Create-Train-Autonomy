@@ -3,7 +3,7 @@ package net.Gabou.createtrainmining.compat.railwaysadditions;
 import com.simibubi.create.content.trains.entity.Train;
 
 import net.Gabou.createtrainmining.core.DriveBackendRegistry;
-import net.neoforged.fml.ModList;
+import net.minecraftforge.fml.ModList;
 
 import java.lang.reflect.Method;
 

@@ -9,7 +9,6 @@ import com.simibubi.create.content.trains.schedule.destination.DestinationInstru
 import net.Gabou.createtrainmining.api.TrainSchedule;
 
 import java.util.ArrayList;
-import java.util.List;
 
 /** Create schedule construction stays inside this adapter. */
 public final class TrainScheduleController {
@@ -39,8 +38,12 @@ public final class TrainScheduleController {
     public void applySchedule(Train train, TrainSchedule request) {
         var schedule = new Schedule();
         schedule.cyclic = request.cyclic();
-        for (String name : request.stations())
-            schedule.entries.add(new ScheduleEntry(destination(name), List.of(List.of())));
+        for (String name : request.stations()) {
+            var entry = new ScheduleEntry();
+            entry.instruction = destination(name);
+            entry.conditions.add(new ArrayList<>());
+            schedule.entries.add(entry);
+        }
         train.runtime.setSchedule(schedule, false);
     }
 

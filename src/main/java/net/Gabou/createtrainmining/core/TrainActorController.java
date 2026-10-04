@@ -6,20 +6,79 @@ import com.simibubi.create.content.contraptions.actors.contraptionControls.Contr
 import com.simibubi.create.content.contraptions.actors.contraptionControls.ContraptionDisableActorPacket;
 import com.simibubi.create.content.trains.entity.CarriageContraptionEntity;
 
-import net.createmod.catnip.platform.CatnipServices;
+import net.Gabou.createtrainmining.network.ActorPausePayload;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
+import net.Gabou.createtrainmining.network.ControllerNetworking;
 
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.WeakHashMap;
 import java.util.function.BiConsumer;
 
 /**
  * Only loaded contraptions and actors whose behaviour explicitly supports disabling are exposed.
  */
 public final class TrainActorController {
+    private Set<ResourceLocation> pausedTypes = Set.of();
+    private final Map<Contraption, Map<ResourceLocation, ItemStack>> appliedPauses =
+            new WeakHashMap<>();
+
+    public void setPausedTypes(ManagedTrain train, Set<ResourceLocation> types) {
+        pausedTypes = Set.copyOf(types);
+        tickPauses(train);
+    }
+
+    /** Transient overrides: Create's saved contraption-control filters remain authoritative. */
+    public void tickPauses(ManagedTrain train) {
+        if (pausedTypes.isEmpty() && appliedPauses.isEmpty()) return;
+        visit(train, (entity, contraption) -> tickPauses(entity));
+    }
+
+    public void tickPauses(CarriageContraptionEntity entity) {
+        var contraption = entity.getContraption();
+        if (contraption == null || (pausedTypes.isEmpty() && !appliedPauses.containsKey(contraption)))
+            return;
+        var previous = appliedPauses.getOrDefault(contraption, Map.of());
+        var available = types(contraption);
+        var affected = new LinkedHashMap<>(previous);
+        pausedTypes.forEach(type -> {
+            var filter = available.get(type);
+            if (filter != null) affected.put(type, filter);
+        });
+        var next = new LinkedHashMap<ResourceLocation, ItemStack>();
+        affected.forEach((type, filter) -> {
+            boolean paused = pausedTypes.contains(type);
+            applyPause(contraption, filter, paused);
+            if (paused) next.put(type, filter);
+            if (paused != previous.containsKey(type)
+                    || (paused && entity.level().getGameTime() % 20 == 0))
+                ControllerNetworking.sendToPlayersTrackingEntity(
+                        entity, new ActorPausePayload(entity.getId(), filter, paused));
+        });
+        if (next.isEmpty()) appliedPauses.remove(contraption);
+        else appliedPauses.put(contraption, next);
+    }
+
+    public static void applyPause(Contraption contraption, ItemStack filter, boolean paused) {
+        boolean enabled = !paused && !contraption.isActorTypeDisabled(filter)
+                && !contraption.isActorTypeDisabled(ItemStack.EMPTY);
+        boolean needsUpdate = contraption.getActors().stream().anyMatch(actor -> {
+            var context = actor.getRight();
+            if (context == null) return false;
+            var behavior = MovementBehaviour.REGISTRY.get(actor.getLeft().state());
+            if (behavior == null) return false;
+            var actorFilter = behavior.canBeDisabledVia(context);
+            return actorFilter != null
+                    && ContraptionControlsMovement.isSameFilter(filter, actorFilter)
+                    && context.disabled == enabled;
+        });
+        if (needsUpdate) contraption.setActorsActive(filter, enabled);
+    }
+
     private void visit(
             ManagedTrain train, BiConsumer<CarriageContraptionEntity, Contraption> consumer) {
         train.unwrap()
@@ -66,8 +125,8 @@ public final class TrainActorController {
                     disabled.removeIf(i -> ContraptionControlsMovement.isSameFilter(i, filter));
                     if (!enabled) disabled.add(filter.copy());
                     contraption.setActorsActive(filter, enabled);
-                    CatnipServices.NETWORK.sendToClientsTrackingEntity(
-                            entity,
+                    com.simibubi.create.AllPackets.getChannel().send(
+                            net.minecraftforge.network.PacketDistributor.TRACKING_ENTITY.with(() -> entity),
                             new ContraptionDisableActorPacket(entity.getId(), filter, enabled));
                     changed[0] = true;
                 });
@@ -75,6 +134,7 @@ public final class TrainActorController {
     }
 
     public boolean isActorTypeEnabled(ManagedTrain train, ResourceLocation type) {
+        if (pausedTypes.contains(type)) return false;
         boolean[] found = {false}, enabled = {true};
         visit(
                 train,

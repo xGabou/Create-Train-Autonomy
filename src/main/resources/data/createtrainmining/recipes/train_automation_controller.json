@@ -20,7 +20,7 @@
     }
   },
   "result": {
-    "id": "createtrainmining:train_automation_controller",
+    "item": "createtrainmining:train_automation_controller",
     "count": 1
   }
 }

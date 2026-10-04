@@ -27,7 +27,7 @@ public final class TrainDiscovery {
                     matches.isEmpty()
                             ? "No train named " + name
                             : "Train name is ambiguous; select its UUID");
-        return matches.getFirst().getId();
+        return matches.get(0).getId();
     }
 
     public static List<StationView> stations() {

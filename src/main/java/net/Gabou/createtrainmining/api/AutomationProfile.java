@@ -12,6 +12,9 @@ public interface AutomationProfile {
 
     void tick(AutomationContext context);
 
+    /** Runs before Create moves the train, for controls that must precede mounted actors. */
+    default void beforeTrainTick(AutomationContext context) {}
+
     default void onTrainArrived(AutomationContext context, String station) {}
 
     default void onInventoryChanged(AutomationContext context) {}

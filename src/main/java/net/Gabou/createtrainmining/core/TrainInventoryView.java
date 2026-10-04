@@ -1,7 +1,7 @@
 package net.Gabou.createtrainmining.core;
 
 import net.minecraft.world.item.ItemStack;
-import net.neoforged.neoforge.items.IItemHandler;
+import net.minecraftforge.items.IItemHandler;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -97,7 +97,7 @@ public final class TrainInventoryView {
         for (var handler : handlers())
             for (int slot = 0; slot < handler.getSlots(); slot++) {
                 var stack = handler.getStackInSlot(slot);
-                hash = 31 * hash + ItemStack.hashItemAndComponents(stack);
+                hash = 31 * hash + java.util.Objects.hash(stack.getItem(), stack.getTag());
                 hash = 31 * hash + stack.getCount();
             }
         return hash;

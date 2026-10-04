@@ -19,14 +19,14 @@ publisher {
     setVersionType(releaseType)
     setChangelog(changelogFile)
     setProjectVersion("${mod_version}+mc${minecraft_version}")
-    setDisplayName("${mod_name} ${mod_version} - NeoForge ${minecraft_version}")
+    setDisplayName("${mod_name} ${mod_version} - Forge ${minecraft_version}")
     setGameVersions(minecraft_version)
-    setLoaders('neoforge')
-    javaVersions.set([JavaVersion.VERSION_21])
+    setLoaders('forge')
+    javaVersions.set([JavaVersion.VERSION_17])
     setCurseEnvironment('both')
     // Pass the distributable file, avoiding a Jar task in the publisher extension.
     // The explicit build dependency below ensures it exists before uploading.
-    setArtifact(tasks.named('jar', Jar).get().archiveFile.get().asFile)
+    setArtifact(tasks.named('reobfJar', Jar).get().archiveFile.get().asFile)
 
     modrinthDepends {
         required 'create'
@@ -74,6 +74,9 @@ def publishingChecks = []
             }
             if (!changelogFile.isFile() || changelogFile.text.trim().isEmpty()) {
                 throw new GradleException("Write release notes in ${changelogFile.name} before publishing.")
+            }
+            if (debugUpload) {
+                logger.lifecycle("${platform.platform} publishing is in PREVIEW mode; no upload will occur. Use -Ppublish_debug=false to publish.")
             }
         }
     }

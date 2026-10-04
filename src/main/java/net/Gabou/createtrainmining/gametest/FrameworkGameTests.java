@@ -7,12 +7,16 @@ import com.simibubi.create.content.trains.graph.*;
 import com.simibubi.create.content.trains.signal.*;
 import com.simibubi.create.content.trains.station.GlobalStation;
 import com.simibubi.create.content.trains.track.TrackMaterial;
+import com.simibubi.create.content.trains.track.BezierConnection;
+import com.simibubi.create.content.contraptions.behaviour.MovementContext;
 
 import net.Gabou.createtrainmining.Createtrainmining;
 import net.Gabou.createtrainmining.api.*;
 import net.Gabou.createtrainmining.core.*;
 import net.createmod.catnip.data.Couple;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.gametest.framework.*;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
@@ -20,8 +24,11 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.item.*;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
-import net.neoforged.neoforge.gametest.*;
-import net.neoforged.neoforge.items.ItemStackHandler;
+import net.minecraft.world.phys.AABB;
+import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemplate.StructureBlockInfo;
+import org.apache.commons.lang3.tuple.MutablePair;
+import net.minecraftforge.gametest.*;
+import net.minecraftforge.items.ItemStackHandler;
 
 import java.util.*;
 
@@ -29,6 +36,188 @@ import java.util.*;
 @GameTestHolder(Createtrainmining.MODID)
 @PrefixGameTestTemplate(false)
 public final class FrameworkGameTests {
+    @GameTest(template = "framework_empty")
+    public static void controllerResourcesLoad(GameTestHelper helper) {
+        var level = helper.getLevel();
+        var item = net.Gabou.createtrainmining.block.ModBlocks.CONTROLLER_ITEM.get();
+        var state = net.Gabou.createtrainmining.block.ModBlocks.CONTROLLER.get().defaultBlockState();
+        var recipe = level.getRecipeManager()
+                .byKey(new ResourceLocation(Createtrainmining.MODID, "train_automation_controller"))
+                .orElseThrow(() -> new IllegalStateException("Controller crafting recipe is missing"));
+        helper.assertTrue(recipe.getResultItem(level.registryAccess()).is(item),
+                "Controller recipe must produce the controller item");
+        helper.assertTrue(state.is(net.minecraft.tags.BlockTags.MINEABLE_WITH_PICKAXE),
+                "Controller must belong to the pickaxe mining tag");
+        var drops = net.minecraft.world.level.block.Block.getDrops(
+                state, level, helper.absolutePos(BlockPos.ZERO), null, null,
+                new ItemStack(Items.IRON_PICKAXE));
+        helper.assertTrue(drops.size() == 1 && drops.get(0).is(item),
+                "Controller loot table must drop the controller item");
+        helper.succeed();
+    }
+
+    @GameTest(template = "framework_empty", timeoutTicks = 200)
+    public static void slopesAreDetectedAheadInBothDirections(GameTestHelper helper) {
+        try (var f = new Fixture(helper.getLevel())) {
+            f.connect(f.last, 256, 240, 0);
+            f.connect(f.first, -128, 240, 0);
+            f.setPosition(110);
+            helper.assertTrue(!f.controller.hasSlopeNearTrain(DriveDirection.FORWARD, 8),
+                    "A distant slope must not pause tools on flat track");
+            f.setPosition(122);
+            helper.assertTrue(f.controller.hasSlopeNearTrain(DriveDirection.FORWARD, 8),
+                    "Descending track must be detected before the front reaches it");
+            helper.assertTrue(!f.controller.hasSlopeNearTrain(DriveDirection.BACKWARD, 8),
+                    "Lookahead must follow the requested direction when stopped");
+            f.setPosition(6);
+            helper.assertTrue(f.controller.hasSlopeNearTrain(DriveDirection.BACKWARD, 8),
+                    "Backward mining must scout the other end of the train");
+        }
+        helper.succeed();
+    }
+
+    @GameTest(template = "framework_empty", timeoutTicks = 200)
+    public static void curvedSlopesWithLevelEndpointsAreDetected(GameTestHelper helper) {
+        try (var f = new Fixture(helper.getLevel())) {
+            var end = f.node(256, 256, 0);
+            var curve = new BezierConnection(
+                    Couple.create(new BlockPos(128, 256, 0), new BlockPos(256, 256, 0)),
+                    Couple.create(new Vec3(128, 256, 0), new Vec3(256, 256, 0)),
+                    Couple.create(new Vec3(1, .2, 0).normalize(), new Vec3(-1, .2, 0).normalize()),
+                    Couple.create(new Vec3(0, 1, 0), new Vec3(0, 1, 0)),
+                    true, false, TrackMaterial.ANDESITE);
+            var edge = new TrackEdge(f.last, end, curve, TrackMaterial.ANDESITE);
+            f.graph.putConnection(f.last, end, edge);
+            f.graph.putConnection(end, f.last,
+                    new TrackEdge(end, f.last, curve.secondary(), TrackMaterial.ANDESITE));
+            f.placeOn(edge, 12);
+            helper.assertTrue(f.controller.hasSlopeNearTrain(DriveDirection.FORWARD, 8),
+                    "Sample curve elevation; equal endpoint heights do not imply level track");
+            var levelCurve = new BezierConnection(curve.bePositions, curve.starts,
+                    Couple.create(new Vec3(1, 0, 0), new Vec3(-1, 0, 0)), curve.normals,
+                    true, false, TrackMaterial.ANDESITE);
+            var flatEdge = new TrackEdge(f.last, end, levelCurve, TrackMaterial.ANDESITE);
+            f.graph.putConnection(f.last, end, flatEdge);
+            f.placeOn(flatEdge, 12);
+            helper.assertTrue(!f.controller.hasSlopeNearTrain(DriveDirection.FORWARD, 8),
+                    "Horizontal curves must not pause mining tools");
+        }
+        helper.succeed();
+    }
+
+    @GameTest(template = "framework_empty", timeoutTicks = 200)
+    public static void miningToolsPauseUntilTheOverhangClearsAndRecoverOnUnload(GameTestHelper helper) {
+        try (var f = new Fixture(helper.getLevel())) {
+            var slope = f.connect(f.last, 256, 240, 0);
+            var flat = f.connect(slope.node2, 384, 240, 0);
+            var tools = f.attachTools();
+            f.station("Depot", 100);
+            f.controller.setProfile("mining");
+            f.controller.setConfig("return_station", "Depot");
+            f.setPosition(122);
+            f.controller.start();
+            helper.assertTrue(f.controller.getStatus().equals("SLOPE_PAUSED")
+                            && tools.getActors().stream().allMatch(a -> a.getRight().disabled),
+                    "Mining start must pause drill and deployer before movement");
+            helper.assertTrue(tools.getDisabledActors().isEmpty() && f.controller.isDirectDriving(),
+                    "Slope pause must retain movement without rewriting saved control settings");
+            // Simulate a carriage entity being reconstructed after the train movement hook.
+            tools = f.attachTools();
+            var entity = ((TestCarriage) f.train.carriages.get(0)).testEntity;
+            entity.setCarriage(f.train.carriages.get(0));
+            entity.tickActors();
+            helper.assertTrue(tools.getActors().stream().allMatch(a -> a.getRight().disabled),
+                    "A newly loaded carriage must be paused by the actor hook before tools act");
+            f.placeOn(flat, 10);
+            f.controller.tickDrive();
+            helper.assertTrue(f.controller.getStatus().equals("SLOPE_PAUSED"),
+                    "The front reaching the bottom must not reactivate tools on the rear overhang");
+            f.placeOn(flat, 40);
+            f.controller.tickDrive();
+            helper.assertTrue(f.controller.getStatus().equals("MINING")
+                            && tools.getActors().stream().noneMatch(a -> a.getRight().disabled),
+                    "Tools must resume only after the entire tool envelope clears the slope");
+            f.placeOn(slope, 20);
+            f.controller.tickDrive();
+            var saved = f.controller.save();
+            f.controller.unload();
+            helper.assertTrue(tools.getActors().stream().noneMatch(a -> a.getRight().disabled),
+                    "Unloading the controller must restore temporary tool pauses");
+            var reloaded = new TrainController(f.level.getServer(), () -> {}, () -> 0);
+            reloaded.load(saved);
+            reloaded.tick();
+            helper.assertTrue(reloaded.getStatus().equals("SLOPE_PAUSED"),
+                    "Reloading mining on a slope must recompute protection before driving");
+            reloaded.stop();
+            reloaded.unload();
+            helper.assertTrue(tools.getActors().stream().noneMatch(a -> a.getRight().disabled),
+                    "Stopping mining must release temporary pauses");
+            f.controller.stop();
+            f.controller.setConfig("pause_tools_on_slopes", "false");
+            f.controller.start();
+            helper.assertTrue(f.controller.getStatus().equals("MINING")
+                            && tools.getActors().stream().noneMatch(a -> a.getRight().disabled),
+                    "Disabling slope protection must leave actor operation under normal controls");
+        }
+        helper.succeed();
+    }
+
+    @GameTest(template = "framework_empty", timeoutTicks = 200)
+    public static void temporaryToolPausesRespectContraptionControls(GameTestHelper helper) {
+        try (var f = new Fixture(helper.getLevel())) {
+            var tools = f.attachTools();
+            var deployer = new ResourceLocation("create:deployer");
+            var drill = new ResourceLocation("create:mechanical_drill");
+            f.controller.setActorTypeEnabled(deployer, false);
+            var original = tools.getDisabledActors().stream().map(ItemStack::copy).toList();
+            f.controller.setPausedActorTypes(Set.of(deployer, drill));
+            helper.assertTrue(tools.getActors().stream().allMatch(a -> a.getRight().disabled),
+                    "Temporary pauses must affect both tool types");
+            f.controller.setPausedActorTypes(Set.of());
+            helper.assertTrue(!f.controller.isActorTypeEnabled(deployer)
+                            && f.controller.isActorTypeEnabled(drill)
+                            && tools.getDisabledActors().size() == original.size(),
+                    "A previously disabled tool must remain disabled when the pause ends");
+            f.controller.setPausedActorTypes(Set.of(deployer, drill));
+            tools.getDisabledActors().add(ItemStack.EMPTY);
+            tools.setActorsActive(ItemStack.EMPTY, false);
+            f.controller.setPausedActorTypes(Set.of());
+            helper.assertTrue(tools.getActors().stream().allMatch(a -> a.getRight().disabled)
+                            && tools.isActorTypeDisabled(ItemStack.EMPTY),
+                    "All-actor Contraption Controls must remain authoritative");
+        }
+        helper.succeed();
+    }
+
+    @GameTest(template = "framework_empty", timeoutTicks = 200)
+    public static void theRearCarriageKeepsSlopeProtectionActive(GameTestHelper helper) {
+        try (var f = new Fixture(helper.getLevel())) {
+            var slope = f.connect(f.last, 256, 240, 0);
+            var flat = f.connect(slope.node2, 384, 240, 0);
+            f.placeOn(flat, 40);
+            double spacing = AllBlocks.SMALL_BOGEY.get().getWheelPointSpacing();
+            var rear = new TestCarriage(new CarriageBogey(AllBlocks.SMALL_BOGEY.get(), false,
+                    new CompoundTag(),
+                    new TravellingPoint(slope.node1, slope.node2, slope, 100, false),
+                    new TravellingPoint(slope.node1, slope.node2, slope, 100 - spacing, false)));
+            rear.storage.initialize();
+            rear.setTrain(f.train);
+            f.train.carriages = new ArrayList<>(f.train.carriages);
+            f.train.carriages.add(rear);
+            helper.assertTrue(f.controller.hasSlopeNearTrain(DriveDirection.FORWARD, 8),
+                    "Tools must remain paused while a rear carriage still occupies the slope");
+            for (var point : List.of(rear.getLeadingPoint(), rear.getTrailingPoint())) {
+                point.node1 = flat.node1;
+                point.node2 = flat.node2;
+                point.edge = flat;
+                point.position = 15 - (point == rear.getTrailingPoint() ? spacing : 0);
+            }
+            helper.assertTrue(!f.controller.hasSlopeNearTrain(DriveDirection.FORWARD, 8),
+                    "Protection must clear once both carriages are entirely on level track");
+        }
+        helper.succeed();
+    }
+
     @GameTest(template = "framework_empty", timeoutTicks = 200)
     public static void stationlessForwardBackwardAndStop(GameTestHelper helper) {
         try (var f = new Fixture(helper.getLevel())) {
@@ -110,7 +299,7 @@ public final class FrameworkGameTests {
             var occupied = new SignalEdgeGroup(group);
             Create.RAILWAYS.signalEdgeGroups.put(group, occupied);
             var blocker =
-                    new Train(UUID.randomUUID(), null, f.graph, List.of(), List.of(), true, 0);
+                    new Train(UUID.randomUUID(), null, f.graph, List.of(), List.of(), true);
             occupied.trains.add(blocker);
             f.controller.startDriving(DriveDirection.FORWARD, .5);
             f.ticks(700);
@@ -215,7 +404,7 @@ public final class FrameworkGameTests {
             Create.RAILWAYS.signalEdgeGroups.put(first.id, first);
             Create.RAILWAYS.signalEdgeGroups.put(second.id, second);
             var blocker =
-                    new Train(UUID.randomUUID(), null, f.graph, List.of(), List.of(), true, 0);
+                    new Train(UUID.randomUUID(), null, f.graph, List.of(), List.of(), true);
             second.trains.add(blocker);
             f.controller.startDriving(DriveDirection.FORWARD, .5);
             f.ticks(600);
@@ -265,7 +454,7 @@ public final class FrameworkGameTests {
                                 true,
                                 true));
                 f.ticks(150);
-                var point = f.train.carriages.getFirst().getLeadingPoint();
+                var point = f.train.carriages.get(0).getLeadingPoint();
                 var expected =
                         switch (strategy) {
                             case LEFT -> leftLocation;
@@ -319,14 +508,14 @@ public final class FrameworkGameTests {
             f.controller.startDriving(DriveDirection.FORWARD, .2);
             f.ticks(30);
             f.train.speedBeforeStall = f.train.speed;
-            f.train.carriages.getFirst().stalled = true;
+            f.train.carriages.get(0).stalled = true;
             f.train.speed = 0;
             f.ticks(3);
             helper.assertTrue(f.train.speed == 0, "An actor stall must suspend motion");
             f.controller.setDirection(DriveDirection.BACKWARD);
             f.ticks(30);
             helper.assertTrue(
-                    !f.train.carriages.getFirst().stalled && f.train.speed < 0,
+                    !f.train.carriages.get(0).stalled && f.train.speed < 0,
                     "Reverse controls must use Create's actor stall cancellation");
             f.train.carriageWaitingForChunks = 0;
             f.ticks(2);
@@ -394,18 +583,18 @@ public final class FrameworkGameTests {
             controller.selectTrain(f.train.id);
             controller.setProfile("mining");
             controller.setConfig("return_threshold", "0.9");
-            var saved = entity.saveWithoutMetadata(level.registryAccess());
+            var saved = entity.saveWithoutMetadata();
             var reloaded =
                     new net.Gabou.createtrainmining.block.TrainAutomationControllerBlockEntity(
                             pos, entity.getBlockState());
             reloaded.setLevel(level);
-            reloaded.loadWithComponents(saved, level.registryAccess());
+            reloaded.load(saved);
             helper.assertTrue(
                     reloaded.controller().getSelectedTrainId().equals(f.train.id)
                             && reloaded.controller().getProfileId().equals("mining")
                             && reloaded.controller().getConfig().get("return_threshold").equals(.9),
                     "Block NBT must persist train UUID, profile and configuration");
-            if (net.neoforged.fml.ModList.get().isLoaded("computercraft"))
+            if (net.minecraftforge.fml.ModList.get().isLoaded("computercraft"))
                 ComputerCraftGameTestSupport.verify(helper, level, pos, controller);
         } finally {
             level.setBlockAndUpdate(
@@ -415,6 +604,7 @@ public final class FrameworkGameTests {
     }
 
     private static final class TestCarriage extends Carriage {
+        CarriageContraptionEntity testEntity;
         TestCarriage(CarriageBogey bogey) {
             super(bogey, null, 0);
         }
@@ -427,6 +617,11 @@ public final class FrameworkGameTests {
         @Override
         public void updateConductors() {
             presentConductors = Couple.create(true, true);
+        }
+
+        @Override
+        public void forEachPresentEntity(java.util.function.Consumer<CarriageContraptionEntity> callback) {
+            if (testEntity != null) callback.accept(testEntity);
         }
     }
 
@@ -463,7 +658,7 @@ public final class FrameworkGameTests {
             carriage.updateConductors();
             train =
                     new Train(
-                            UUID.randomUUID(), null, graph, List.of(carriage), List.of(), true, 0);
+                            UUID.randomUUID(), null, graph, List.of(carriage), List.of(), true);
             train.name = Component.literal("Framework Test Train");
             Create.RAILWAYS.trains.put(train.id, train);
             controller = new TrainController(level.getServer(), () -> {}, () -> 0);
@@ -471,13 +666,53 @@ public final class FrameworkGameTests {
         }
 
         double position() {
-            return train.carriages.getFirst().getLeadingPoint().position;
+            return train.carriages.get(0).getLeadingPoint().position;
         }
 
         void setPosition(double position) {
             double delta = position - position();
-            train.carriages.getFirst().getLeadingPoint().position += delta;
-            train.carriages.getFirst().getTrailingPoint().position += delta;
+            train.carriages.get(0).getLeadingPoint().position += delta;
+            train.carriages.get(0).getTrailingPoint().position += delta;
+        }
+
+        TrackNode node(int x, int y, int z) {
+            var location = new TrackNodeLocation(x, y, z).in(level);
+            graph.loadNode(location, 10 + graph.getNodes().size(), new Vec3(0, 1, 0));
+            return graph.locateNode(location);
+        }
+
+        TrackEdge connect(TrackNode from, int x, int y, int z) {
+            var to = node(x, y, z);
+            var connection = new TrackEdge(from, to, null, TrackMaterial.ANDESITE);
+            graph.putConnection(from, to, connection);
+            graph.putConnection(to, from, new TrackEdge(to, from, null, TrackMaterial.ANDESITE));
+            return connection;
+        }
+
+        void placeOn(TrackEdge on, double at) {
+            double spacing = AllBlocks.SMALL_BOGEY.get().getWheelPointSpacing();
+            var carriage = train.carriages.get(0);
+            for (var point : List.of(carriage.getLeadingPoint(), carriage.getTrailingPoint())) {
+                point.node1 = on.node1;
+                point.node2 = on.node2;
+                point.edge = on;
+                point.position = at - (point == carriage.getTrailingPoint() ? spacing : 0);
+            }
+            train.speed = 0;
+        }
+
+        CarriageContraption attachTools() {
+            var contraption = new CarriageContraption(Direction.EAST);
+            contraption.bounds = new AABB(-24, 0, -1, 6, 3, 1);
+            var drill = new StructureBlockInfo(new BlockPos(4, 1, 0),
+                    AllBlocks.MECHANICAL_DRILL.getDefaultState(), new CompoundTag());
+            var deployer = new StructureBlockInfo(new BlockPos(-20, 1, 0),
+                    AllBlocks.DEPLOYER.getDefaultState(), new CompoundTag());
+            for (var info : List.of(drill, deployer))
+                contraption.getActors().add(MutablePair.of(info, new MovementContext(level, info, contraption)));
+            ((TestCarriage) train.carriages.get(0)).testEntity =
+                    CarriageContraptionEntity.create(level, contraption);
+            return contraption;
         }
 
         void ticks(int count) {

@@ -13,13 +13,23 @@ public record ConfigurationField(
         Editor editor,
         boolean advanced) {
     /** Optional client presentation; parsing and persisted values are unchanged. */
-    public enum Editor { DEFAULT, STATION }
+    public enum Editor {
+        DEFAULT,
+        STATION
+    }
 
     // Preserve the original constructor for existing profile consumers.
-    public ConfigurationField(String key, String label, Type type, Object defaultValue,
-            double min, double max, List<String> options) {
+    public ConfigurationField(
+            String key,
+            String label,
+            Type type,
+            Object defaultValue,
+            double min,
+            double max,
+            List<String> options) {
         this(key, label, type, defaultValue, min, max, options, Editor.DEFAULT, false);
     }
+
     public enum Type {
         STRING,
         NUMBER,
@@ -36,11 +46,13 @@ public record ConfigurationField(
     }
 
     public static ConfigurationField station(String key, String label, String value) {
-        return new ConfigurationField(key, label, Type.STRING, value, 0, 256, List.of(), Editor.STATION, false);
+        return new ConfigurationField(
+                key, label, Type.STRING, value, 0, 256, List.of(), Editor.STATION, false);
     }
 
     public ConfigurationField asAdvanced() {
-        return new ConfigurationField(key, label, type, defaultValue, min, max, options, editor, true);
+        return new ConfigurationField(
+                key, label, type, defaultValue, min, max, options, editor, true);
     }
 
     public static ConfigurationField ratio(String key, String label, double value) {

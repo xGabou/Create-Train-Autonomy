@@ -2,6 +2,9 @@
 
 This layout was recorded before implementation. The reference is the **Create 6.0.10-280** source and assets resolved by this project, not a newer Create branch.
 
+The Forge 1.20.1 branch ports this presentation to Create 6.0.8-289. Its opt-in
+visual preview writes to `build/reference/presentation-1.20.1/`.
+
 ## Reference study
 
 - `StationScreen` / `AbstractStationScreen`: 18 by 18 icon buttons, borderless text, compact railway information, the train's real `TrainIconType` and carriage `bogeySpacing` rendering.
@@ -72,3 +75,38 @@ Create's existing item-description formatting supplies a Shift tooltip. No Ponde
 ## Verification to record after implementation
 
 Verify build and existing regression checks, all four facings, all four lamp variants, real train sprites, empty train/station lists, long names, long translated labels, error tooltips, scrolling, profile changes, advanced/manual pages, and overflow schemas. Capture the actual screen at Auto, 2, 3, and 4 where the viewport permits. Record the effective GUI dimensions because Minecraft can limit the requested scale on small windows.
+
+## Implemented adjustments and profile metadata
+
+The planned frame and positions are retained. The station pencil sits beside its label at `(206, rowY - 1)`, leaving the selector its full 66 pixels. The advanced backend selector spans 168 pixels at `(124, 76)` so the default backend name stays readable. Advanced pages have five entries rather than six to accommodate that taller first entry. The gear, pencil, and lever are original 16-pixel glyphs within Create's `IconButton`; play/stop/refresh/confirm and page navigation use `AllIcons`.
+
+`ConfigurationField` adds optional presentation metadata while retaining the original seven-argument constructor. Existing factories keep their parsing, numeric bounds, and defaults. Profiles can use `ConfigurationField.station(...)` for a station picker, or append `.asAdvanced()` to any field. These hints do not change the persisted configuration or automation behavior. Mining's only change is marking its existing station field and deployer field this way.
+
+New display text can be localized with `createtrainmining.profile.<profile-id-with-colons-replaced-by-dots>` and `createtrainmining.profile.<profile-id>.field.<field-key>`. Missing translations fall back to readable registry IDs and the profile's existing field labels. The GUI contains no Mining-specific layout or transitions.
+
+The existing status payload now includes numeric field bounds and display hints, plus the selected train's icon ID, carriage spacing, double-ended flag, and speed relative to Create's manual maximum. All existing command handlers and validation remain unchanged. Raw signed speed is retained in the tooltip. Profile settings are locked while automation runs, as required by the existing server API. Station custom entries keep the existing name/filter functionality.
+
+## Verification results
+
+The opt-in `runClient -PvisualPreview=true` client rendered the actual `ControllerScreen`, actual Create widgets and train sprites, and Minecraft's baked cabinet models. It used status fixtures at the title screen, without entering a world or sending train commands. The preview package is excluded from the production jar.
+
+At a **1280 by 960** client window, the captured effective scales were:
+
+| Requested GUI scale | Effective scale | Scaled viewport | Result |
+| --- | --- | --- | --- |
+| Auto | 4 | 320 x 240 | Fits, including the status strip |
+| 2 | 2 | 640 x 480 | Fits |
+| 3 | 3 | 427 x 320 | Fits |
+| 4 | 4 | 320 x 240 | Fits, including error and selection tooltips |
+
+Checks covered long train and station names, a long error with its full tooltip, stopped/running/waiting/error indicators, manual and advanced pages, a seventeen-field profile on three pages, long translated field labels, empty discovery data, and a station filter edit. Assertions confirmed that visible widgets remain inside the frame, incoming status updates preserve focused text and scroll edits, and all sixteen facing/lamp combinations resolve the intended lamp texture. A divider crossing the section title and a narrow backend selector were corrected after inspecting the captures.
+
+`build` and the existing **12 server GameTests** passed. Hash comparisons confirmed that the controller core, driving, schedules, state machine, persistence, ownership, and integration implementation files are unchanged. The original Mining profile implementation is unchanged; only its configuration factory calls carry the two presentation hints.
+
+The preview fixture does not exercise player-driven train commands in a live world. Those use the same existing packets and server handlers, and the unchanged server GameTests cover the automation operations. No new force-return/resume state transitions were added for presentation.
+
+Full captures and logs are in `build/reference/presentation` and `build/reference/presentation-client.log`. Representative screenshots are kept below for review:
+
+![Controller screen, Auto at a 320x240 scaled viewport](images/controller-screen.png)
+
+![Controller cabinet variants rendered by Minecraft](images/controller-cabinet.png)
