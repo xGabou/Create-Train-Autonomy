@@ -1,0 +1,20 @@
+pluginManagement {
+    repositories {
+        mavenLocal()
+        gradlePluginPortal()
+        maven { url = 'https://maven.neoforged.net/releases' }
+        maven {
+            name = 'FirstDarkReleases'
+            url = 'https://maven.firstdark.dev/releases'
+            content {
+                includeGroupByRegex 'com\\.hypherionmc\\..*'
+                includeGroup 'me.hypherionmc.modutils'
+                includeGroup 'com.github.masecla22'
+            }
+        }
+    }
+}
+
+plugins {
+    id 'org.gradle.toolchains.foojay-resolver-convention' version '0.8.0'
+}

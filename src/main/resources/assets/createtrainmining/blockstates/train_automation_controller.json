@@ -1,0 +1,68 @@
+{
+  "variants": {
+    "facing=north,lamp=inactive": {
+      "model": "createtrainmining:block/train_automation_controller",
+      "y": 0
+    },
+    "facing=north,lamp=running": {
+      "model": "createtrainmining:block/train_automation_controller_running",
+      "y": 0
+    },
+    "facing=north,lamp=waiting": {
+      "model": "createtrainmining:block/train_automation_controller_waiting",
+      "y": 0
+    },
+    "facing=north,lamp=error": {
+      "model": "createtrainmining:block/train_automation_controller_error",
+      "y": 0
+    },
+    "facing=east,lamp=inactive": {
+      "model": "createtrainmining:block/train_automation_controller",
+      "y": 90
+    },
+    "facing=east,lamp=running": {
+      "model": "createtrainmining:block/train_automation_controller_running",
+      "y": 90
+    },
+    "facing=east,lamp=waiting": {
+      "model": "createtrainmining:block/train_automation_controller_waiting",
+      "y": 90
+    },
+    "facing=east,lamp=error": {
+      "model": "createtrainmining:block/train_automation_controller_error",
+      "y": 90
+    },
+    "facing=south,lamp=inactive": {
+      "model": "createtrainmining:block/train_automation_controller",
+      "y": 180
+    },
+    "facing=south,lamp=running": {
+      "model": "createtrainmining:block/train_automation_controller_running",
+      "y": 180
+    },
+    "facing=south,lamp=waiting": {
+      "model": "createtrainmining:block/train_automation_controller_waiting",
+      "y": 180
+    },
+    "facing=south,lamp=error": {
+      "model": "createtrainmining:block/train_automation_controller_error",
+      "y": 180
+    },
+    "facing=west,lamp=inactive": {
+      "model": "createtrainmining:block/train_automation_controller",
+      "y": 270
+    },
+    "facing=west,lamp=running": {
+      "model": "createtrainmining:block/train_automation_controller_running",
+      "y": 270
+    },
+    "facing=west,lamp=waiting": {
+      "model": "createtrainmining:block/train_automation_controller_waiting",
+      "y": 270
+    },
+    "facing=west,lamp=error": {
+      "model": "createtrainmining:block/train_automation_controller_error",
+      "y": 270
+    }
+  }
+}

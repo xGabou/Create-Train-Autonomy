@@ -1,0 +1,7 @@
+{
+  "parent": "createtrainmining:block/train_automation_controller",
+  "textures": {
+    "front": "createtrainmining:block/controller_front_running",
+    "lamp": "createtrainmining:block/controller_lamp_running"
+  }
+}

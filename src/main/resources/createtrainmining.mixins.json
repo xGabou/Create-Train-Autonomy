@@ -1,0 +1,18 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "net.Gabou.createtrainmining.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "mixins": [
+    "TrainTickMixin",
+    "PlayerControlsMixin"
+  ],
+  "client": [],
+  "injectors": {
+    "defaultRequire": 1
+  },
+  "overwrites": {
+    "requireAnnotations": true
+  },
+  "plugin": "net.Gabou.createtrainmining.mixin.OptionalMixinPlugin"
+}

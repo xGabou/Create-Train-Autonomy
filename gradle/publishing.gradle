@@ -1,0 +1,97 @@
+// Plugin reference: https://modpublisher.fdd-docs.com/
+def modrinthProject = providers.gradleProperty('modrinth_project_id').orElse('').get().trim()
+def curseforgeProject = providers.gradleProperty('curseforge_project_id').orElse('').get().trim()
+def modrinthToken = providers.environmentVariable('MODRINTH_TOKEN').orElse('').get()
+def curseforgeToken = providers.environmentVariable('CURSEFORGE_TOKEN')
+        .orElse(providers.environmentVariable('CURSE_TOKEN')).orElse('').get()
+def releaseType = providers.gradleProperty('publish_release_type').orElse('beta').get()
+def changelogFile = file(providers.gradleProperty('publish_changelog').orElse('CHANGELOG.md').get())
+def debugUpload = providers.gradleProperty('publish_debug').orElse('true').get().toBoolean()
+
+publisher {
+    apiKeys {
+        modrinth modrinthToken
+        curseforge curseforgeToken
+    }
+    setModrinthID(modrinthProject)
+    setCurseID(curseforgeProject)
+    setDebug(debugUpload)
+    setVersionType(releaseType)
+    setChangelog(changelogFile)
+    setProjectVersion("${mod_version}+mc${minecraft_version}")
+    setDisplayName("${mod_name} ${mod_version} - NeoForge ${minecraft_version}")
+    setGameVersions(minecraft_version)
+    setLoaders('neoforge')
+    javaVersions.set([JavaVersion.VERSION_21])
+    setCurseEnvironment('both')
+    // Pass the distributable file, avoiding a Jar task in the publisher extension.
+    // The explicit build dependency below ensures it exists before uploading.
+    setArtifact(tasks.named('jar', Jar).get().archiveFile.get().asFile)
+
+    modrinthDepends {
+        required 'create'
+        optional 'cc-tweaked', 'create-additional-logistics', 'railways-additions'
+    }
+    curseDepends {
+        required 'create'
+        optional 'cc-tweaked', 'create-additional-logistics', 'railways-additions'
+    }
+}
+
+// Safety net if configuration caching is explicitly enabled for an upload.
+// This marker prevents cache problems from failing the build, but Gradle still
+// attempts serialization and reports them. Uploads should leave the cache off.
+['publishMod', 'publishModrinth', 'publishCurseforge'].each { taskName ->
+    tasks.matching { it.name == taskName }.configureEach {
+        notCompatibleWithConfigurationCache('ModPublisher upload tasks use the Gradle Project API')
+    }
+}
+
+// Always build/check the release before uploads, including single-platform retries.
+// Fail clearly on missing configuration instead of silently skipping an upload.
+def publishingChecks = []
+[
+    publishModrinth: [id: modrinthProject, property: 'modrinth_project_id', token: modrinthToken,
+                     environment: 'MODRINTH_TOKEN', platform: 'Modrinth'],
+    publishCurseforge: [id: curseforgeProject, property: 'curseforge_project_id', token: curseforgeToken,
+                       environment: 'CURSEFORGE_TOKEN', platform: 'CurseForge']
+].each { taskName, platform ->
+    def validationTask = tasks.register("validate${platform.platform}Publishing") {
+        group = 'publishing'
+        description = "Check the ${platform.platform} upload configuration without API calls"
+        doLast {
+            if (platform.id.isEmpty()) {
+                throw new GradleException("Fill ${platform.property} in gradle.properties before publishing to ${platform.platform}.")
+            }
+            if (platform.platform == 'CurseForge' && !(platform.id ==~ /[0-9]+/)) {
+                throw new GradleException('curseforge_project_id must be the numeric CurseForge project ID.')
+            }
+            if (platform.token.trim().isEmpty()) {
+                throw new GradleException("Set the ${platform.environment} environment variable before publishing to ${platform.platform}.")
+            }
+            if (!(releaseType in ['alpha', 'beta', 'release'])) {
+                throw new GradleException('publish_release_type must be alpha, beta, or release.')
+            }
+            if (!changelogFile.isFile() || changelogFile.text.trim().isEmpty()) {
+                throw new GradleException("Write release notes in ${changelogFile.name} before publishing.")
+            }
+        }
+    }
+    publishingChecks.add(validationTask)
+    tasks.named(taskName) {
+        dependsOn tasks.named('build'), validationTask
+    }
+}
+
+// With publishMod, check both platforms before either uploads. Individual platform
+// tasks only require their own check, so a failed platform can be retried alone.
+['publishModrinth', 'publishCurseforge'].each { taskName ->
+    tasks.named(taskName) {
+        mustRunAfter publishingChecks
+    }
+}
+
+// publishMod targets both requested platforms; use the individual task for retries.
+tasks.named('publishMod') {
+    dependsOn tasks.named('publishModrinth'), tasks.named('publishCurseforge')
+}
