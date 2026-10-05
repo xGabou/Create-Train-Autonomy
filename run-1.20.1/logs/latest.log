@@ -1,0 +1,78 @@
+[04oct.2026 15:21:04.872] [main/INFO] [cpw.mods.modlauncher.Launcher/MODLAUNCHER]: ModLauncher running: args [--launchTarget, forgegametestserveruserdev, --gameDir, ., --fml.forgeVersion, 47.4.0, --fml.mcVersion, 1.20.1, --fml.forgeGroup, net.minecraftforge, --fml.mcpVersion, 20230612.114412, --mixin.config, createtrainmining.mixins.json]
+[04oct.2026 15:21:04.877] [main/INFO] [cpw.mods.modlauncher.Launcher/MODLAUNCHER]: ModLauncher 10.0.10+10.0.10+main.22f00f84 starting: java version 17.0.17 by Eclipse Adoptium; OS Windows 11 arch amd64 version 10.0
+[04oct.2026 15:21:04.996] [main/INFO] [net.minecraftforge.fml.loading.ImmediateWindowHandler/]: ImmediateWindowProvider not loading because launch target is forgegametestserveruserdev
+[04oct.2026 15:21:05.042] [main/INFO] [mixin/]: SpongePowered MIXIN Subsystem Version=0.8.5 Source=union:/C:/Users/matga/.gradle/caches/modules-2/files-2.1/org.spongepowered/mixin/0.8.5/9d1c0c3a304ae6697ecd477218fa61b850bf57fc/mixin-0.8.5.jar%23141!/ Service=ModLauncher Env=SERVER
+[04oct.2026 15:21:05.254] [main/WARN] [net.minecraftforge.fml.loading.moddiscovery.ModFileParser/LOADING]: Mod file C:\Users\matga\.gradle\caches\modules-2\files-2.1\net.minecraftforge\fmlcore\1.20.1-47.4.0\235975dafa4309945b59c56b53f31dc5b65a6051\fmlcore-1.20.1-47.4.0.jar is missing mods.toml file
+[04oct.2026 15:21:05.257] [main/WARN] [net.minecraftforge.fml.loading.moddiscovery.ModFileParser/LOADING]: Mod file C:\Users\matga\.gradle\caches\modules-2\files-2.1\net.minecraftforge\javafmllanguage\1.20.1-47.4.0\f0c0b352173d0a378cbdcec9cfc4ba65899a721\javafmllanguage-1.20.1-47.4.0.jar is missing mods.toml file
+[04oct.2026 15:21:05.259] [main/WARN] [net.minecraftforge.fml.loading.moddiscovery.ModFileParser/LOADING]: Mod file C:\Users\matga\.gradle\caches\modules-2\files-2.1\net.minecraftforge\lowcodelanguage\1.20.1-47.4.0\e862740d8c84d08dbfedea412bef88fe42e727c5\lowcodelanguage-1.20.1-47.4.0.jar is missing mods.toml file
+[04oct.2026 15:21:05.261] [main/WARN] [net.minecraftforge.fml.loading.moddiscovery.ModFileParser/LOADING]: Mod file C:\Users\matga\.gradle\caches\modules-2\files-2.1\net.minecraftforge\mclanguage\1.20.1-47.4.0\5719b3a297a33f877ed5dde4cb4bd75c859096af\mclanguage-1.20.1-47.4.0.jar is missing mods.toml file
+[04oct.2026 15:21:05.535] [main/INFO] [net.minecraftforge.fml.loading.moddiscovery.JarInJarDependencyLocator/]: Found 3 dependencies adding them to mods collection
+[04oct.2026 15:21:07.599] [main/INFO] [mixin/]: Compatibility level set to JAVA_17
+[04oct.2026 15:21:07.610] [main/ERROR] [mixin/]: Mixin config createadditionallogistics.mixins.json does not specify "minVersion" property
+[04oct.2026 15:21:07.612] [main/INFO] [cpw.mods.modlauncher.LaunchServiceHandler/MODLAUNCHER]: Launching target 'forgegametestserveruserdev' with arguments [--gameDir, .]
+[04oct.2026 15:21:07.728] [main/WARN] [mixin/]: Reference map 'createtrainmining.refmap.json' for createtrainmining.mixins.json could not be read. If this is a development environment you can ignore this message
+[04oct.2026 15:21:08.028] [main/INFO] [mixin/]: Remapping refMap architectury-forge-refmap.json using G:\\mods\\CreateTrainMining\\build\\moddev\\artifacts\\intermediateToNamed.srg
+[04oct.2026 15:21:08.029] [main/INFO] [mixin/]: Remapping refMap architectury-common-refmap.json using G:\\mods\\CreateTrainMining\\build\\moddev\\artifacts\\intermediateToNamed.srg
+[04oct.2026 15:21:08.030] [main/INFO] [mixin/]: Remapping refMap backend-flywheel.refmap.json using G:\\mods\\CreateTrainMining\\build\\moddev\\artifacts\\intermediateToNamed.srg
+[04oct.2026 15:21:08.031] [main/INFO] [mixin/]: Remapping refMap flywheel.refmap.json using G:\\mods\\CreateTrainMining\\build\\moddev\\artifacts\\intermediateToNamed.srg
+[04oct.2026 15:21:08.032] [main/INFO] [mixin/]: Remapping refMap ponder.refmap.json using G:\\mods\\CreateTrainMining\\build\\moddev\\artifacts\\intermediateToNamed.srg
+[04oct.2026 15:21:08.033] [main/INFO] [mixin/]: Remapping refMap ponder.refmap.json using G:\\mods\\CreateTrainMining\\build\\moddev\\artifacts\\intermediateToNamed.srg
+[04oct.2026 15:21:08.037] [main/INFO] [mixin/]: Remapping refMap create.refmap.json using G:\\mods\\CreateTrainMining\\build\\moddev\\artifacts\\intermediateToNamed.srg
+[04oct.2026 15:21:08.038] [main/INFO] [mixin/]: Remapping refMap createadditionallogistics.refmap.json using G:\\mods\\CreateTrainMining\\build\\moddev\\artifacts\\intermediateToNamed.srg
+[04oct.2026 15:21:08.039] [main/INFO] [mixin/]: Remapping refMap railwaysuntold_additions-common-common-refmap.json using G:\\mods\\CreateTrainMining\\build\\moddev\\artifacts\\intermediateToNamed.srg
+[04oct.2026 15:21:08.040] [main/INFO] [mixin/]: Remapping refMap railwaysuntold_additions-common-common-refmap.json using G:\\mods\\CreateTrainMining\\build\\moddev\\artifacts\\intermediateToNamed.srg
+[04oct.2026 15:21:08.937] [main/INFO] [MixinExtras|Service/]: Initializing MixinExtras via com.llamalad7.mixinextras.service.MixinExtrasServiceImpl(version=0.4.1).
+[04oct.2026 15:21:14.596] [modloading-worker-0/INFO] [com.simibubi.create.Create/]: Create 6.0.8 initializing! Commit hash: 1a1a9a2819b4f89f78caec41b55ed8cb222fa24b
+[04oct.2026 15:21:14.661] [modloading-worker-0/INFO] [net.minecraftforge.common.ForgeMod/FORGEMOD]: Forge mod loading, version 47.4.0, for MC 1.20.1 with MCP 20230612.114412
+[04oct.2026 15:21:14.661] [modloading-worker-0/INFO] [net.minecraftforge.common.MinecraftForge/FORGE]: MinecraftForge v47.4.0 Initialized
+[04oct.2026 15:21:14.797] [modloading-worker-0/INFO] [com.vodmordia.railwaysuntold_additions.RailwaysUntoldAdditions/]: [RailwaysUntoldAdditions] Initializing...
+[04oct.2026 15:21:14.879] [modloading-worker-0/INFO] [dev.architectury.networking.forge.NetworkManagerImpl/]: Registering C2S receiver with id architectury:sync_ids
+[04oct.2026 15:21:14.894] [modloading-worker-0/INFO] [dev.architectury.networking.forge.NetworkManagerImpl/]: Registering C2S receiver with id railwaysuntold_additions:cruise_control_set_speed
+[04oct.2026 15:21:14.895] [modloading-worker-0/INFO] [dev.architectury.networking.forge.NetworkManagerImpl/]: Registering C2S receiver with id railwaysuntold_additions:cruise_remote_open_gui
+[04oct.2026 15:21:14.896] [modloading-worker-0/INFO] [dev.architectury.networking.forge.NetworkManagerImpl/]: Registering C2S receiver with id railwaysuntold_additions:cruise_remote_toggle
+[04oct.2026 15:21:14.896] [modloading-worker-0/INFO] [dev.architectury.networking.forge.NetworkManagerImpl/]: Registering C2S receiver with id railwaysuntold_additions:cruise_remote_stop_toggle
+[04oct.2026 15:21:14.913] [modloading-worker-0/INFO] [com.vodmordia.railwaysuntold_additions.RailwaysUntoldAdditions/]: [RailwaysUntoldAdditions] Config system ready
+[04oct.2026 15:21:14.913] [modloading-worker-0/INFO] [com.vodmordia.railwaysuntold_additions.RailwaysUntoldAdditions/]: [RailwaysUntoldAdditions] Initialized
+[04oct.2026 15:21:17.209] [modloading-worker-0/INFO] [com.vodmordia.railwaysuntold_additions.contraption.ContraptionInteractionRegistry/]: [INTERACTION] register() called - railways loaded: false, workstations: false, beds: false
+[04oct.2026 15:21:17.216] [modloading-worker-0/INFO] [com.vodmordia.railwaysuntold_additions.RailwaysUntoldAdditions/]: [Spotlights] Registered Create movement-necessary check for 3 blocks.
+[04oct.2026 15:21:17.375] [Forge Version Check/INFO] [net.minecraftforge.fml.VersionChecker/]: [computercraft] Starting version check at https://api.modrinth.com/updates/cc-tweaked/forge_updates.json
+[04oct.2026 15:21:17.863] [Forge Version Check/INFO] [net.minecraftforge.fml.VersionChecker/]: [computercraft] Found status: UP_TO_DATE Current: 1.120.2 Target: null
+[04oct.2026 15:21:17.863] [Forge Version Check/INFO] [net.minecraftforge.fml.VersionChecker/]: [forge] Starting version check at https://files.minecraftforge.net/net/minecraftforge/forge/promotions_slim.json
+[04oct.2026 15:21:17.940] [Forge Version Check/INFO] [net.minecraftforge.fml.VersionChecker/]: [forge] Found status: OUTDATED Current: 47.4.0 Target: 47.4.10
+[04oct.2026 15:21:19.148] [main/INFO] [com.mojang.authlib.yggdrasil.YggdrasilAuthenticationService/]: Environment: authHost='https://authserver.mojang.com', accountsHost='https://api.mojang.com', sessionHost='https://sessionserver.mojang.com', servicesHost='https://api.minecraftservices.com', name='PROD'
+[04oct.2026 15:21:19.199] [main/INFO] [net.minecraftforge.registries.GameData/REGISTRIES]: Injecting existing registry data into this CLIENT instance
+[04oct.2026 15:21:20.145] [main/WARN] [net.minecraft.server.packs.VanillaPackResourcesBuilder/]: Assets URL 'union:/G:/mods/CreateTrainMining/build/moddev/artifacts/forge-1.20.1-47.4.0.jar%23143!/assets/.mcassetsroot' uses unexpected schema
+[04oct.2026 15:21:20.145] [main/WARN] [net.minecraft.server.packs.VanillaPackResourcesBuilder/]: Assets URL 'union:/G:/mods/CreateTrainMining/build/moddev/artifacts/forge-1.20.1-47.4.0.jar%23143!/data/.mcassetsroot' uses unexpected schema
+[04oct.2026 15:21:20.197] [main/INFO] [com.simibubi.create.Create/]: Created 157 recipes which will be injected into the game
+[04oct.2026 15:21:20.209] [main/INFO] [com.simibubi.create.Create/]: Created 0 tags which will be injected into the game
+[04oct.2026 15:21:21.963] [main/INFO] [net.minecraft.world.item.crafting.RecipeManager/]: Loaded 22 recipes
+[04oct.2026 15:21:22.043] [main/INFO] [net.minecraft.advancements.AdvancementList/]: Loaded 2552 advancements
+[04oct.2026 15:21:22.054] [main/INFO] [dan200.computercraft.impl.UpgradeManager/]: Loaded 9 turtle upgrades
+[04oct.2026 15:21:22.054] [main/INFO] [dan200.computercraft.impl.UpgradeManager/]: Loaded 3 pocket computer upgrades
+[04oct.2026 15:21:22.855] [main/INFO] [net.minecraftforge.gametest.ForgeGameTestHooks/]: Enabled Gametest Namespaces: [createtrainmining]
+[04oct.2026 15:21:23.425] [Server thread/INFO] [net.minecraft.server.MinecraftServer/]: Preparing start region for dimension minecraft:overworld
+[04oct.2026 15:21:25.083] [Worker-Main-12/INFO] [net.minecraft.server.level.progress.LoggerChunkProgressListener/]: Preparing spawn area: 0%
+[04oct.2026 15:21:25.083] [Worker-Main-12/INFO] [net.minecraft.server.level.progress.LoggerChunkProgressListener/]: Preparing spawn area: 0%
+[04oct.2026 15:21:25.083] [Worker-Main-4/INFO] [net.minecraft.server.level.progress.LoggerChunkProgressListener/]: Preparing spawn area: 0%
+[04oct.2026 15:21:25.084] [Worker-Main-4/INFO] [net.minecraft.server.level.progress.LoggerChunkProgressListener/]: Preparing spawn area: 0%
+[04oct.2026 15:21:25.427] [Worker-Main-18/INFO] [net.minecraft.server.level.progress.LoggerChunkProgressListener/]: Preparing spawn area: 23%
+[04oct.2026 15:21:25.718] [Server thread/INFO] [net.minecraft.server.level.progress.LoggerChunkProgressListener/]: Time elapsed: 2292 ms
+[04oct.2026 15:21:25.720] [Server thread/INFO] [net.minecraft.gametest.framework.GameTestServer/]: Started game test server
+[04oct.2026 15:21:25.740] [Server thread/INFO] [net.minecraftforge.server.permission.PermissionAPI/]: Successfully initialized permission handler forge:default_handler
+[04oct.2026 15:21:25.987] [Server thread/INFO] [net.minecraft.gametest.framework.GameTestBatchRunner/]: Running test batch 'defaultBatch:1' (18 tests)...
+[04oct.2026 15:21:26.037] [Server thread/INFO] [net.minecraft.gametest.framework.GameTestServer/]: 18 tests are now running!
+[04oct.2026 15:21:26.829] [Server thread/INFO] [net.minecraft.gametest.framework.GameTestServer/]: [++++++++++++++++++]
+[04oct.2026 15:21:26.829] [Server thread/INFO] [net.minecraft.gametest.framework.GameTestServer/]: ========= 18 GAME TESTS COMPLETE ======================
+[04oct.2026 15:21:26.830] [Server thread/INFO] [net.minecraft.gametest.framework.GameTestServer/]: All 18 required tests passed :)
+[04oct.2026 15:21:26.831] [Server thread/INFO] [net.minecraft.gametest.framework.GameTestServer/]: ====================================================
+[04oct.2026 15:21:26.835] [Server thread/INFO] [net.minecraft.server.MinecraftServer/]: Stopping server
+[04oct.2026 15:21:26.835] [Server thread/INFO] [net.minecraft.server.MinecraftServer/]: Saving players
+[04oct.2026 15:21:26.835] [Server thread/INFO] [net.minecraft.server.MinecraftServer/]: Saving worlds
+[04oct.2026 15:21:27.886] [Server thread/INFO] [net.minecraft.server.MinecraftServer/]: Saving chunks for level 'ServerLevel[world]'/minecraft:overworld
+[04oct.2026 15:21:28.440] [Server thread/INFO] [net.minecraft.server.MinecraftServer/]: Saving chunks for level 'ServerLevel[world]'/minecraft:the_nether
+[04oct.2026 15:21:28.455] [Server thread/INFO] [net.minecraft.server.MinecraftServer/]: Saving chunks for level 'ServerLevel[world]'/minecraft:the_end
+[04oct.2026 15:21:28.478] [Server thread/INFO] [net.minecraft.server.MinecraftServer/]: ThreadedAnvilChunkStorage (world): All chunks are saved
+[04oct.2026 15:21:28.478] [Server thread/INFO] [net.minecraft.server.MinecraftServer/]: ThreadedAnvilChunkStorage (DIM-1): All chunks are saved
+[04oct.2026 15:21:28.478] [Server thread/INFO] [net.minecraft.server.MinecraftServer/]: ThreadedAnvilChunkStorage (DIM1): All chunks are saved
+[04oct.2026 15:21:28.478] [Server thread/INFO] [net.minecraft.server.MinecraftServer/]: ThreadedAnvilChunkStorage: All dimensions are saved
+[04oct.2026 15:21:29.372] [Server thread/INFO] [net.minecraft.gametest.framework.GameTestServer/]: Game test server shutting down

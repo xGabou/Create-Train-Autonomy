@@ -26,6 +26,16 @@ Create is resolved from its official Maven repository as `create-1.21.1:6.0.10-2
 
 The distributable jar is in `build/libs`. Development GameTests and their empty structure are excluded from the jar.
 
+### Create Threaded Trains compatibility
+
+When Create Threaded Trains 1.0.0 is installed, an optional compatibility hook runs its railway task immediately on the server thread. Railway ticks still run once per server tick, and its normal task/future lifecycle is preserved. This prevents automation callbacks, slope checks, and tool controls from accessing world state on the train worker. It disables parallel ticking for the entire railway network while both mods are installed, including trains without a controller; this avoids races when a controller selects or claims a train during the server tick. A one-time warning in the server log makes the fallback visible. Without the addon, no compatibility hook is loaded and Create's normal ticking is unchanged.
+
+To test with the addon in an isolated development world:
+
+```powershell
+.\gradlew.bat runGameTestServer -PwithThreadedTrains=true -PgameTestDirectory=build/gametest-threaded-trains
+```
+
 ## Publishing
 
 ModPublisher is configured for Modrinth and CurseForge. Fill the project IDs in `gradle.properties`, set `MODRINTH_TOKEN` and `CURSEFORGE_TOKEN` in your environment, and edit `CHANGELOG.md` for the release. Upload previews are enabled by default. See [the publishing guide](docs/publishing.md) for build, preview, and upload commands.
@@ -95,9 +105,13 @@ Only `automation/mining` contains the mining workflow:
 
 Select a train with cargo storage and a conductor, choose `mining`, and configure its return station. The profile drives stationlessly in its configured outbound direction. At the return threshold it switches to a normal Create station schedule. At the station it waits for the unload threshold, then resumes outbound direct motion when automatic resume is enabled.
 
-Configuration keys are `return_station`, `return_threshold`, `unload_threshold`, `mining_speed`, `outbound_direction`, `automatic_resume`, and `track_deployer_control`. Thresholds and speed use fractions. The unload threshold must be below a positive return threshold. The return station is not hardcoded.
+Configuration keys are `return_station`, `return_threshold`, `unload_threshold`, `mining_speed`, `outbound_direction`, `automatic_resume`, `track_deployer_control`, `pause_tools_on_slopes`, and `slope_lookahead`. Thresholds and speed use fractions. The unload threshold must be below a positive return threshold. The return station is not hardcoded.
 
 The optional deployer setting controls the Create deployer actor type on loaded carriages, including all deployers that support that actor filter; it does not infer which deployers are holding track. It defaults to disabled. The profile remembers the previous aggregate enabled state for stop cleanup. Contraption-wide actor disabling remains authoritative. The profile waits at the current track end so actors can extend the route.
+
+**Pause Tools on Slopes** is enabled by default in the mining profile's advanced settings (gear button). It temporarily pauses all Create deployers and mechanical drills when sloped track is ahead or under any carriage, while continuing to drive. **Slope Lookahead** defaults to 8 blocks and accepts 2–64 blocks, measured beyond the carriage/tool reach. Scouts sample track elevation, including curved slopes, in either mining direction. Tools resume after the rear carriage and its overhanging tools clear the slope. The controller shows **Slope: tools paused** during the crossing. No additional Contraption Controls block is required.
+
+Slope pauses use Create's actor-disable behavior with separate client synchronization. They preserve saved Contraption Controls filters, so manually disabled tools stay disabled afterward. Stopping, unloading, player takeover, and errors release temporary overrides; resumed automation checks the track again. This protection operates during outbound mining on the existing track graph; it cannot anticipate slopes that have not been built yet, and it does not remove blocks already placed in the way.
 
 ## CC:Tweaked
 

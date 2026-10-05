@@ -8,11 +8,12 @@ import com.simibubi.create.foundation.gui.widget.IconButton;
 import com.simibubi.create.foundation.gui.widget.Indicator;
 import com.simibubi.create.foundation.gui.widget.ScrollInput;
 import com.simibubi.create.foundation.gui.widget.SelectionScrollInput;
-import net.createmod.catnip.gui.widget.AbstractSimiWidget;
-import net.createmod.catnip.gui.element.ScreenElement;
+
 import net.Gabou.createtrainmining.Createtrainmining;
 import net.Gabou.createtrainmining.network.ControllerCommandPayload;
 import net.Gabou.createtrainmining.network.ControllerMenu;
+import net.createmod.catnip.gui.element.ScreenElement;
+import net.createmod.catnip.gui.widget.AbstractSimiWidget;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.EditBox;
@@ -27,26 +28,40 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.player.Inventory;
 import net.neoforged.neoforge.network.PacketDistributor;
+
 import org.lwjgl.glfw.GLFW;
+
 import java.util.*;
 import java.util.function.Consumer;
 
-/** Create widgets over an original railway instrument panel. Existing command semantics are retained. */
+/**
+ * Create widgets over an original railway instrument panel. Existing command semantics are
+ * retained.
+ */
 public final class ControllerScreen extends AbstractSimiContainerScreen<ControllerMenu> {
     public static final int PANEL_WIDTH = 304, PANEL_HEIGHT = 226;
     private static final int ROWS = 6, VALUE_X = 226, VALUE_WIDTH = 66;
     private static final int INSET_TEXT = 0xdedbc9, MUTED_TEXT = 0xaab3a2;
-    private static final ResourceLocation FRAME = ResourceLocation.fromNamespaceAndPath(
-            Createtrainmining.MODID, "textures/gui/controller.png");
-    private enum Page { CONFIGURATION, MANUAL, ADVANCED }
+    private static final ResourceLocation FRAME =
+            ResourceLocation.fromNamespaceAndPath(
+                    Createtrainmining.MODID, "textures/gui/controller.png");
+
+    private enum Page {
+        CONFIGURATION,
+        MANUAL,
+        ADVANCED
+    }
+
     private record TextTip(Rect2i bounds, Component text) {}
+
     private record ValueControl(ScrollInput input, Consumer<String> synchronize) {}
 
     private CompoundTag status = new CompoundTag();
     private Page view = Page.CONFIGURATION;
     private int page, editDelay, manualSpeed = 20;
     private String manualDirection = "FORWARD", destination = "", error = "";
-    private final Map<String, String> drafts = new LinkedHashMap<>(), pending = new LinkedHashMap<>();
+    private final Map<String, String> drafts = new LinkedHashMap<>(),
+            pending = new LinkedHashMap<>();
     private final Map<String, ValueControl> values = new LinkedHashMap<>();
     private final Map<String, EditBox> textInputs = new LinkedHashMap<>();
     private final Set<String> customStationFields = new LinkedHashSet<>();
@@ -74,7 +89,8 @@ public final class ControllerScreen extends AbstractSimiContainerScreen<Controll
     }
 
     private Component named(String kind, String id) {
-        return Component.translatableWithFallback("createtrainmining." + kind + "." + id.replace(':', '.'),
+        return Component.translatableWithFallback(
+                "createtrainmining." + kind + "." + id.replace(':', '.'),
                 humanize(id.substring(id.indexOf(':') + 1)));
     }
 
@@ -89,10 +105,12 @@ public final class ControllerScreen extends AbstractSimiContainerScreen<Controll
     }
 
     private IconButton icon(int x, int y, ScreenElement glyph, String tooltip, Runnable callback) {
-        IconButton button = new IconButton(leftPos + x, topPos + y, glyph) {
-            @Override
-            protected void renderTooltip(GuiGraphics graphics, int mx, int my, float partial) {}
-        };
+        IconButton button =
+                new IconButton(leftPos + x, topPos + y, glyph) {
+                    @Override
+                    protected void renderTooltip(
+                            GuiGraphics graphics, int mx, int my, float partial) {}
+                };
         button.setToolTip(tr(tooltip));
         button.setMessage(tr(tooltip));
         button.withCallback(callback);
@@ -100,11 +118,15 @@ public final class ControllerScreen extends AbstractSimiContainerScreen<Controll
     }
 
     private static ScreenElement glyph(String name) {
-        var texture = ResourceLocation.fromNamespaceAndPath(Createtrainmining.MODID, "textures/gui/" + name + ".png");
+        var texture =
+                ResourceLocation.fromNamespaceAndPath(
+                        Createtrainmining.MODID, "textures/gui/" + name + ".png");
         return (graphics, x, y) -> graphics.blit(texture, x, y, 0, 0, 16, 16, 16, 16);
     }
 
-    private int rows() { return view == Page.ADVANCED ? 5 : ROWS; }
+    private int rows() {
+        return view == Page.ADVANCED ? 5 : ROWS;
+    }
 
     private int rowY(int index) {
         int row = index % rows();
@@ -123,23 +145,48 @@ public final class ControllerScreen extends AbstractSimiContainerScreen<Controll
             trainIds.add(trains.getCompound(i).getString("Id"));
             trainNames.add(Component.literal(trains.getCompound(i).getString("Name")));
         }
-        selection(16, 45, 94, tr("train"), trainIds, trainNames, status.getString("TrainId"), id -> {
-            flushEdits();
-            send("select_train", "", id);
-        }, false);
+        selection(
+                16,
+                45,
+                94,
+                tr("train"),
+                trainIds,
+                trainNames,
+                status.getString("TrainId"),
+                id -> {
+                    flushEdits();
+                    send("select_train", "", id);
+                },
+                false,
+                tr("select_train"));
         List<String> profiles = strings("Profiles");
-        selection(198, 30, 94, tr("automation"), profiles,
-                profiles.stream().map(id -> named("profile", id)).toList(), status.getString("Profile"), id -> {
+        selection(
+                198,
+                30,
+                94,
+                tr("automation"),
+                profiles,
+                profiles.stream().map(id -> named("profile", id)).toList(),
+                status.getString("Profile"),
+                id -> {
                     flushEdits();
                     drafts.clear();
                     customStationFields.clear();
                     page = 0;
                     send("set_profile", "", id);
-                }, false);
-        start = icon(12, 186, AllIcons.I_PLAY, "start", () -> {
-            flushEdits();
-            send("start", "", "");
-        });
+                },
+                false,
+                tr("select_profile"));
+        start =
+                icon(
+                        12,
+                        186,
+                        AllIcons.I_PLAY,
+                        "start",
+                        () -> {
+                            flushEdits();
+                            send("start", "", "");
+                        });
         start.green = true;
         stop = icon(34, 186, AllIcons.I_STOP, "stop", () -> send("stop", "", ""));
         manual = icon(56, 186, glyph("manual_controls"), "manual", () -> switchView(Page.MANUAL));
@@ -158,16 +205,28 @@ public final class ControllerScreen extends AbstractSimiContainerScreen<Controll
             for (int i = page * rows(); i < Math.min(fields.size(), (page + 1) * rows()); i++)
                 field(fields.get(i), rowY(i));
         }
-        previous = icon(198, 186, AllIcons.I_CONFIG_PREV, "previous", () -> {
-            flushEdits();
-            page--;
-            buildWidgets();
-        });
-        next = icon(246, 186, AllIcons.I_CONFIG_NEXT, "next", () -> {
-            flushEdits();
-            page++;
-            buildWidgets();
-        });
+        previous =
+                icon(
+                        198,
+                        186,
+                        AllIcons.I_CONFIG_PREV,
+                        "previous",
+                        () -> {
+                            flushEdits();
+                            page--;
+                            buildWidgets();
+                        });
+        next =
+                icon(
+                        246,
+                        186,
+                        AllIcons.I_CONFIG_NEXT,
+                        "next",
+                        () -> {
+                            flushEdits();
+                            page++;
+                            buildWidgets();
+                        });
         updateAvailability();
     }
 
@@ -195,8 +254,11 @@ public final class ControllerScreen extends AbstractSimiContainerScreen<Controll
 
     private Component fieldLabel(CompoundTag field) {
         if (field.getString("Key").equals("@backend")) return tr("backend");
-        return Component.translatableWithFallback("createtrainmining.profile."
-                + status.getString("Profile").replace(':', '.') + ".field." + field.getString("Key"),
+        return Component.translatableWithFallback(
+                "createtrainmining.profile."
+                        + status.getString("Profile").replace(':', '.')
+                        + ".field."
+                        + field.getString("Key"),
                 field.getString("Label"));
     }
 
@@ -205,51 +267,132 @@ public final class ControllerScreen extends AbstractSimiContainerScreen<Controll
         Component label = fieldLabel(field);
         if (key.equals("@backend")) {
             List<String> backends = strings("Backends");
-            selection(124, y + 14, 168, label, backends,
+            selection(
+                    124,
+                    y + 14,
+                    168,
+                    label,
+                    backends,
                     backends.stream().map(id -> named("backend", id)).toList(),
-                    status.getString("Backend"), id -> send("set_backend", "", id), true);
+                    status.getString("Backend"),
+                    id -> send("set_backend", "", id),
+                    true);
             return;
         }
         String value = drafts.getOrDefault(key, field.getString("Value"));
         String type = field.getString("Type");
         if (type.equals("BOOLEAN")) {
-            ScrollInput input = selection(VALUE_X, y, VALUE_WIDTH, label,
-                    List.of("false", "true"), List.of(tr("disabled"), tr("enabled")), value,
-                    selected -> queueEdit(key, selected), true);
-            values.put(key, new ValueControl(input, v -> input.setState(Boolean.parseBoolean(v) ? 1 : 0)));
+            ScrollInput input =
+                    selection(
+                            VALUE_X,
+                            y,
+                            VALUE_WIDTH,
+                            label,
+                            List.of("false", "true"),
+                            List.of(tr("disabled"), tr("enabled")),
+                            value,
+                            selected -> queueEdit(key, selected),
+                            true);
+            values.put(
+                    key,
+                    new ValueControl(input, v -> input.setState(Boolean.parseBoolean(v) ? 1 : 0)));
         } else if (type.equals("CHOICE")) {
             List<String> options = tagStrings(field, "Options");
-            ScrollInput input = selection(VALUE_X, y, VALUE_WIDTH, label, options,
-                    options.stream().map(v -> named("choice", v)).toList(), value,
-                    selected -> queueEdit(key, selected), true);
-            values.put(key, new ValueControl(input, v -> input.setState(Math.max(0, options.indexOf(v)))));
+            ScrollInput input =
+                    selection(
+                            VALUE_X,
+                            y,
+                            VALUE_WIDTH,
+                            label,
+                            options,
+                            options.stream().map(v -> named("choice", v)).toList(),
+                            value,
+                            selected -> queueEdit(key, selected),
+                            true);
+            values.put(
+                    key,
+                    new ValueControl(input, v -> input.setState(Math.max(0, options.indexOf(v)))));
         } else if (type.equals("NUMBER") && scrollable(field)) {
             boolean percent = field.getDouble("Min") == 0 && field.getDouble("Max") == 1;
-            int multiplier = percent || field.getDouble("Min") % 1 != 0
-                    || field.getDouble("Max") % 1 != 0 || Double.parseDouble(value) % 1 != 0 ? 100 : 1;
-            ScrollInput input = number(VALUE_X, y, VALUE_WIDTH, label,
-                    (int) Math.ceil(field.getDouble("Min") * multiplier),
-                    (int) Math.floor(field.getDouble("Max") * multiplier) + 1,
-                    (int) Math.round(Double.parseDouble(value) * multiplier),
-                    n -> percent ? Component.literal(n + "%") : Component.literal(multiplier == 1
-                            ? Integer.toString(n) : String.format(Locale.ROOT, "%.2f", n / 100.0)),
-                    n -> queueEdit(key, Double.toString(n / (double) multiplier)), true);
-            values.put(key, new ValueControl(input,
-                    v -> input.setState((int) Math.round(Double.parseDouble(v) * multiplier))));
-        } else if (field.getString("Editor").equals("STATION") && !customStationFields.contains(key)) {
+            int multiplier =
+                    percent
+                                    || field.getDouble("Min") % 1 != 0
+                                    || field.getDouble("Max") % 1 != 0
+                                    || Double.parseDouble(value) % 1 != 0
+                            ? 100
+                            : 1;
+            ScrollInput input =
+                    number(
+                            VALUE_X,
+                            y,
+                            VALUE_WIDTH,
+                            label,
+                            (int) Math.ceil(field.getDouble("Min") * multiplier),
+                            (int) Math.floor(field.getDouble("Max") * multiplier) + 1,
+                            (int) Math.round(Double.parseDouble(value) * multiplier),
+                            n ->
+                                    percent
+                                            ? Component.literal(n + "%")
+                                            : Component.literal(
+                                                    multiplier == 1
+                                                            ? Integer.toString(n)
+                                                            : String.format(
+                                                                    Locale.ROOT,
+                                                                    "%.2f",
+                                                                    n / 100.0)),
+                            n -> queueEdit(key, Double.toString(n / (double) multiplier)),
+                            true);
+            values.put(
+                    key,
+                    new ValueControl(
+                            input,
+                            v ->
+                                    input.setState(
+                                            (int) Math.round(Double.parseDouble(v) * multiplier))));
+        } else if (field.getString("Editor").equals("STATION")
+                && !customStationFields.contains(key)) {
             List<String> options = stationOptions(value);
-            ScrollInput input = selection(VALUE_X, y, VALUE_WIDTH, label, options,
-                    options.stream().map(v -> v.isBlank() ? tr("choose_station") : Component.literal(v)).toList(),
-                    value, selected -> queueEdit(key, selected), true);
-            values.put(key, new ValueControl(input, v -> input.setState(Math.max(0, options.indexOf(v)))));
-            IconButton custom = icon(206, y - 1, glyph("pencil"), "custom_station", () -> {
-                customStationFields.add(key);
-                buildWidgets();
-            });
+            ScrollInput input =
+                    selection(
+                            VALUE_X,
+                            y,
+                            VALUE_WIDTH,
+                            label,
+                            options,
+                            options.stream()
+                                    .map(
+                                            v ->
+                                                    v.isBlank()
+                                                            ? tr("choose_station")
+                                                            : Component.literal(v))
+                                    .toList(),
+                            value,
+                            selected -> queueEdit(key, selected),
+                            true);
+            values.put(
+                    key,
+                    new ValueControl(input, v -> input.setState(Math.max(0, options.indexOf(v)))));
+            IconButton custom =
+                    icon(
+                            206,
+                            y - 1,
+                            glyph("pencil"),
+                            "custom_station",
+                            () -> {
+                                customStationFields.add(key);
+                                buildWidgets();
+                            });
             configurationWidgets.add(custom);
         } else {
-            EditBox input = addRenderableWidget(new EditBox(font, leftPos + VALUE_X + 3, topPos + y + 4,
-                    VALUE_WIDTH - 26, 10, label));
+            EditBox input =
+                    addRenderableWidget(
+                            new EditBox(
+                                    font,
+                                    leftPos + VALUE_X + 3,
+                                    topPos + y + 4,
+                                    VALUE_WIDTH - 26,
+                                    10,
+                                    label));
             input.setBordered(false);
             input.setTextColor(INSET_TEXT);
             input.setTextColorUneditable(MUTED_TEXT);
@@ -258,41 +401,85 @@ public final class ControllerScreen extends AbstractSimiContainerScreen<Controll
             input.setResponder(v -> drafts.put(key, v));
             textInputs.put(key, input);
             configurationWidgets.add(input);
-            IconButton apply = icon(274, y - 1, AllIcons.I_CONFIRM, "apply", () -> {
-                queueEdit(key, input.getValue());
-                flushEdits();
-                if (field.getString("Editor").equals("STATION")) {
-                    customStationFields.remove(key);
-                    buildWidgets();
-                }
-            });
+            IconButton apply =
+                    icon(
+                            274,
+                            y - 1,
+                            AllIcons.I_CONFIRM,
+                            "apply",
+                            () -> {
+                                queueEdit(key, input.getValue());
+                                flushEdits();
+                                if (field.getString("Editor").equals("STATION")) {
+                                    customStationFields.remove(key);
+                                    buildWidgets();
+                                }
+                            });
             configurationWidgets.add(apply);
         }
     }
 
     private static boolean scrollable(CompoundTag field) {
-        return Double.isFinite(field.getDouble("Min")) && Double.isFinite(field.getDouble("Max"))
+        return Double.isFinite(field.getDouble("Min"))
+                && Double.isFinite(field.getDouble("Max"))
                 && Math.abs(field.getDouble("Min")) < 1_000_000
                 && Math.abs(field.getDouble("Max")) < 1_000_000;
     }
 
     private void buildManual() {
-        number(VALUE_X, 62, VALUE_WIDTH, tr("drive_speed"), 0, 101, manualSpeed,
-                n -> Component.literal(n + "%"), n -> manualSpeed = n, false);
-        selection(VALUE_X, 82, VALUE_WIDTH, tr("direction"), List.of("FORWARD", "BACKWARD"),
-                List.of(named("choice", "FORWARD"), named("choice", "BACKWARD")), manualDirection,
-                direction -> manualDirection = direction, false);
+        number(
+                VALUE_X,
+                62,
+                VALUE_WIDTH,
+                tr("drive_speed"),
+                0,
+                101,
+                manualSpeed,
+                n -> Component.literal(n + "%"),
+                n -> manualSpeed = n,
+                false);
+        selection(
+                VALUE_X,
+                82,
+                VALUE_WIDTH,
+                tr("direction"),
+                List.of("FORWARD", "BACKWARD"),
+                List.of(named("choice", "FORWARD"), named("choice", "BACKWARD")),
+                manualDirection,
+                direction -> manualDirection = direction,
+                false);
         List<String> stations = stationOptions(destination);
-        if (destination.isBlank() && !strings("Stations").isEmpty()) destination = strings("Stations").getFirst();
-        selection(VALUE_X, 102, VALUE_WIDTH, tr("destination"), stations,
-                stations.stream().map(v -> v.isBlank() ? tr("choose_station") : Component.literal(v)).toList(),
-                destination, station -> destination = station, false);
-        IconButton drive = icon(124, 132, AllIcons.I_PLAY, "start_drive",
-                () -> send("drive", manualDirection, Double.toString(manualSpeed / 100.0)));
+        if (destination.isBlank() && !strings("Stations").isEmpty())
+            destination = strings("Stations").getFirst();
+        selection(
+                VALUE_X,
+                102,
+                VALUE_WIDTH,
+                tr("destination"),
+                stations,
+                stations.stream()
+                        .map(v -> v.isBlank() ? tr("choose_station") : Component.literal(v))
+                        .toList(),
+                destination,
+                station -> destination = station,
+                false);
+        IconButton drive =
+                icon(
+                        124,
+                        132,
+                        AllIcons.I_PLAY,
+                        "start_drive",
+                        () -> send("drive", manualDirection, Double.toString(manualSpeed / 100.0)));
         drive.green = true;
-        IconButton brake = icon(146, 132, AllIcons.I_STOP, "stop_drive", () -> send("stop_drive", "", ""));
-        IconButton navigate = icon(174, 132, AllIcons.I_VIEW_SCHEDULE, "go_to_station",
-                () -> send("go_to_station", "", destination));
+        IconButton brake =
+                icon(146, 132, AllIcons.I_STOP, "stop_drive", () -> send("stop_drive", "", ""));
+        IconButton navigate =
+                icon(
+                        174,
+                        132,
+                        AllIcons.I_VIEW_SCHEDULE,
+                        "go_to_station",
+                        () -> send("go_to_station", "", destination));
         configurationWidgets.addAll(List.of(drive, brake, navigate));
     }
 
@@ -304,35 +491,76 @@ public final class ControllerScreen extends AbstractSimiContainerScreen<Controll
         return new ArrayList<>(stations);
     }
 
-    private ScrollInput selection(int x, int y, int width, Component label, List<String> ids,
-            List<? extends Component> options, String selected, Consumer<String> callback, boolean configuration) {
-        SelectionScrollInput input = new SelectionScrollInput(leftPos + x, topPos + y, width, 16) {
-            @Override
-            protected void doRender(GuiGraphics graphics, int mx, int my, float partial) {
-                drawValue(graphics, this, formatter.apply(state), true);
-            }
-            @Override
-            protected void renderTooltip(GuiGraphics graphics, int mx, int my, float partial) {}
-            @Override
-            public void onClick(double mx, double my) {
-                if (ids.isEmpty()) return;
-                setState((getState() + 1) % ids.size());
-                onChanged();
-            }
-            @Override
-            public boolean keyPressed(int key, int scan, int modifiers) {
-                if (key == GLFW.GLFW_KEY_LEFT || key == GLFW.GLFW_KEY_RIGHT) {
-                    setState(Math.floorMod(getState() + (key == GLFW.GLFW_KEY_LEFT ? -1 : 1),
-                            Math.max(1, ids.size())));
-                    onChanged();
-                    return true;
-                }
-                return super.keyPressed(key, scan, modifiers);
-            }
-        };
-        input.forOptions(options.isEmpty() ? List.of(tr("unavailable")) : options)
-                .titled(label.copy()).setState(Math.max(0, ids.indexOf(selected)))
-                .calling(i -> { if (i < ids.size()) callback.accept(ids.get(i)); });
+    private ScrollInput selection(
+            int x,
+            int y,
+            int width,
+            Component label,
+            List<String> ids,
+            List<? extends Component> options,
+            String selected,
+            Consumer<String> callback,
+            boolean configuration) {
+        return selection(x, y, width, label, ids, options, selected, callback, configuration, null);
+    }
+
+    private ScrollInput selection(
+            int x,
+            int y,
+            int width,
+            Component label,
+            List<String> ids,
+            List<? extends Component> options,
+            String selected,
+            Consumer<String> callback,
+            boolean configuration,
+            Component placeholder) {
+        boolean awaitingSelection = placeholder != null && !ids.isEmpty() && !ids.contains(selected);
+        List<String> choices = new ArrayList<>(ids);
+        List<Component> labels = new ArrayList<>(options);
+        if (awaitingSelection) {
+            choices.add(0, "");
+            labels.add(0, placeholder);
+        }
+        SelectionScrollInput input =
+                new SelectionScrollInput(leftPos + x, topPos + y, width, 16) {
+                    @Override
+                    protected void doRender(GuiGraphics graphics, int mx, int my, float partial) {
+                        drawValue(graphics, this, formatter.apply(state), true);
+                    }
+
+                    @Override
+                    protected void renderTooltip(
+                            GuiGraphics graphics, int mx, int my, float partial) {}
+
+                    @Override
+                    public void onClick(double mx, double my) {
+                        if (ids.isEmpty()) return;
+                        setState((getState() + 1) % choices.size());
+                        onChanged();
+                    }
+
+                    @Override
+                    public boolean keyPressed(int key, int scan, int modifiers) {
+                        if (key == GLFW.GLFW_KEY_LEFT || key == GLFW.GLFW_KEY_RIGHT) {
+                            setState(
+                                    Math.floorMod(
+                                            getState() + (key == GLFW.GLFW_KEY_LEFT ? -1 : 1),
+                                            Math.max(1, choices.size())));
+                            onChanged();
+                            return true;
+                        }
+                        return super.keyPressed(key, scan, modifiers);
+                    }
+                };
+        input.forOptions(labels.isEmpty() ? List.of(tr("unavailable")) : labels)
+                .titled(label.copy())
+                .setState(Math.max(0, choices.indexOf(selected)))
+                .calling(
+                        i -> {
+                            if (i >= (awaitingSelection ? 1 : 0) && i < choices.size())
+                                callback.accept(choices.get(i));
+                        });
         input.setMessage(label);
         input.active = !ids.isEmpty();
         addRenderableWidget(input);
@@ -340,40 +568,66 @@ public final class ControllerScreen extends AbstractSimiContainerScreen<Controll
         return input;
     }
 
-    private ScrollInput number(int x, int y, int width, Component label, int min, int max, int value,
+    private ScrollInput number(
+            int x,
+            int y,
+            int width,
+            Component label,
+            int min,
+            int max,
+            int value,
             java.util.function.Function<Integer, Component> format,
-            Consumer<Integer> callback, boolean configuration) {
-        ScrollInput input = new ScrollInput(leftPos + x, topPos + y, width, 16) {
-            @Override
-            protected void doRender(GuiGraphics graphics, int mx, int my, float partial) {
-                drawValue(graphics, this, formatter.apply(state), false);
-            }
-            @Override
-            protected void renderTooltip(GuiGraphics graphics, int mx, int my, float partial) {}
-            @Override
-            public void onClick(double mx, double my) {
-                setState(getState() + 1);
-                onChanged();
-            }
-        };
-        input.withRange(min, max).format(format).withShiftStep(5).titled(label.copy())
-                .setState(value).calling(callback);
+            Consumer<Integer> callback,
+            boolean configuration) {
+        ScrollInput input =
+                new ScrollInput(leftPos + x, topPos + y, width, 16) {
+                    @Override
+                    protected void doRender(GuiGraphics graphics, int mx, int my, float partial) {
+                        drawValue(graphics, this, formatter.apply(state), false);
+                    }
+
+                    @Override
+                    protected void renderTooltip(
+                            GuiGraphics graphics, int mx, int my, float partial) {}
+
+                    @Override
+                    public void onClick(double mx, double my) {
+                        setState(getState() + 1);
+                        onChanged();
+                    }
+                };
+        input.withRange(min, max)
+                .format(format)
+                .withShiftStep(5)
+                .titled(label.copy())
+                .setState(value)
+                .calling(callback);
         input.setMessage(label);
         addRenderableWidget(input);
         if (configuration) configurationWidgets.add(input);
         return input;
     }
 
-    private void drawValue(GuiGraphics graphics, ScrollInput input, Component value, boolean choice) {
+    private void drawValue(
+            GuiGraphics graphics, ScrollInput input, Component value, boolean choice) {
         int x = input.getX(), y = input.getY(), width = input.getWidth();
         recess(graphics, x, y, width, 16, input.isHoveredOrFocused() && input.active);
-        graphics.drawString(font, ellipsize(value, width - 13), x + 4, y + 4,
-                input.active ? INSET_TEXT : MUTED_TEXT, false);
-        graphics.fill(x + width - 6, y + 4, x + width - 3, y + 5,
-                input.active ? 0xffc5ac70 : 0xff808878);
-        graphics.fill(x + width - 5, y + 3, x + width - 4, y + 6,
-                input.active ? 0xffc5ac70 : 0xff808878);
-        graphics.fill(x + width - 6, y + 11, x + width - 3, y + 12,
+        graphics.drawString(
+                font,
+                ellipsize(value, width - 13),
+                x + 4,
+                y + 4,
+                input.active ? INSET_TEXT : MUTED_TEXT,
+                false);
+        graphics.fill(
+                x + width - 6, y + 4, x + width - 3, y + 5, input.active ? 0xffc5ac70 : 0xff808878);
+        graphics.fill(
+                x + width - 5, y + 3, x + width - 4, y + 6, input.active ? 0xffc5ac70 : 0xff808878);
+        graphics.fill(
+                x + width - 6,
+                y + 11,
+                x + width - 3,
+                y + 12,
                 input.active ? 0xffc5ac70 : 0xff808878);
         if (choice) graphics.fill(x + width - 5, y + 10, x + width - 4, y + 13, 0xff9a855b);
     }
@@ -400,7 +654,8 @@ public final class ControllerScreen extends AbstractSimiContainerScreen<Controll
         error = "";
         if (minecraft.getConnection() == null) return;
         PacketDistributor.sendToServer(
-                new ControllerCommandPayload(menu.containerId, menu.position(), action, key, value));
+                new ControllerCommandPayload(
+                        menu.containerId, menu.position(), action, key, value));
     }
 
     @Override
@@ -418,8 +673,11 @@ public final class ControllerScreen extends AbstractSimiContainerScreen<Controll
     public void receive(CompoundTag next) {
         boolean changed = !structure(status).equals(structure(next));
         status = next;
-        error = next.getString("Error");
-        if (!error.isEmpty()) drafts.keySet().removeIf(key -> !pending.containsKey(key));
+        String reportedError = next.getString("Error");
+        if (!reportedError.isEmpty()) {
+            error = reportedError;
+            drafts.keySet().removeIf(key -> !pending.containsKey(key));
+        }
         var fields = status.getList("Fields", Tag.TAG_COMPOUND);
         for (int i = 0; i < fields.size(); i++) {
             CompoundTag field = fields.getCompound(i);
@@ -440,8 +698,20 @@ public final class ControllerScreen extends AbstractSimiContainerScreen<Controll
 
     private static CompoundTag structure(CompoundTag data) {
         CompoundTag structure = data.copy();
-        for (String key : List.of("State", "Mode", "Enabled", "Error", "Speed", "SpeedRatio", "Inventory",
-                "Station", "Direction", "TrainIcon", "CarriageLengths", "DoubleEnded")) structure.remove(key);
+        for (String key :
+                List.of(
+                        "State",
+                        "Mode",
+                        "Enabled",
+                        "Error",
+                        "Speed",
+                        "SpeedRatio",
+                        "Inventory",
+                        "Station",
+                        "Direction",
+                        "TrainIcon",
+                        "CarriageLengths",
+                        "DoubleEnded")) structure.remove(key);
         var fields = structure.getList("Fields", Tag.TAG_COMPOUND);
         for (int i = 0; i < fields.size(); i++) fields.getCompound(i).remove("Value");
         return structure;
@@ -462,13 +732,21 @@ public final class ControllerScreen extends AbstractSimiContainerScreen<Controll
             if (widget instanceof net.minecraft.client.gui.components.AbstractWidget control)
                 control.active = !enabled && selected;
         }
-        indicator.state = !error.isEmpty() || status.getString("Mode").equals("ERROR") ? Indicator.State.RED
-                : enabled || List.of("DIRECT_CONTROL", "SCHEDULE_CONTROL").contains(status.getString("Mode"))
-                ? Math.abs(status.getDouble("Speed")) > .0001 ? Indicator.State.GREEN : Indicator.State.YELLOW
-                : Indicator.State.OFF;
+        indicator.state =
+                !error.isEmpty() || status.getString("Mode").equals("ERROR")
+                        ? Indicator.State.RED
+                        : enabled
+                                        || List.of("DIRECT_CONTROL", "SCHEDULE_CONTROL")
+                                                .contains(status.getString("Mode"))
+                                ? Math.abs(status.getDouble("Speed")) > .0001
+                                        ? Indicator.State.GREEN
+                                        : Indicator.State.YELLOW
+                                : Indicator.State.OFF;
     }
 
-    private List<String> strings(String key) { return tagStrings(status, key); }
+    private List<String> strings(String key) {
+        return tagStrings(status, key);
+    }
 
     private static List<String> tagStrings(CompoundTag tag, String key) {
         var list = tag.getList(key, Tag.TAG_STRING);
@@ -479,8 +757,11 @@ public final class ControllerScreen extends AbstractSimiContainerScreen<Controll
 
     private Component ellipsize(Component text, int width) {
         if (font.width(text) <= width) return text;
-        return Component.literal(font.plainSubstrByWidth(text.getString(),
-                Math.max(0, width - font.width("..."))) + "...").setStyle(text.getStyle());
+        return Component.literal(
+                        font.plainSubstrByWidth(
+                                        text.getString(), Math.max(0, width - font.width("...")))
+                                + "...")
+                .setStyle(text.getStyle());
     }
 
     private void text(GuiGraphics graphics, Component text, int x, int y, int width, int color) {
@@ -495,23 +776,42 @@ public final class ControllerScreen extends AbstractSimiContainerScreen<Controll
     @Override
     protected void renderBg(GuiGraphics graphics, float partial, int mouseX, int mouseY) {
         textTips.clear();
-        graphics.blit(FRAME, leftPos, topPos, 0, 0, PANEL_WIDTH, PANEL_HEIGHT, PANEL_WIDTH, PANEL_HEIGHT);
+        graphics.blit(
+                FRAME, leftPos, topPos, 0, 0, PANEL_WIDTH, PANEL_HEIGHT, PANEL_WIDTH, PANEL_HEIGHT);
         AllIcons.I_VIEW_SCHEDULE.render(graphics, leftPos + 10, topPos + 5);
         text(graphics, title, 32, 10, 260, 0x54452e);
         text(graphics, tr("train"), 16, 32, 92, MUTED_TEXT);
         text(graphics, tr("automation"), 124, 34, 70, AllGuiTextures.FONT_COLOR);
-        text(graphics, tr(view == Page.ADVANCED ? "advanced_title"
-                : view == Page.MANUAL ? "manual_title" : "configuration"),
-                124, 49, 166, AllGuiTextures.FONT_COLOR);
+        text(
+                graphics,
+                tr(
+                        view == Page.ADVANCED
+                                ? "advanced_title"
+                                : view == Page.MANUAL ? "manual_title" : "configuration"),
+                124,
+                49,
+                166,
+                AllGuiTextures.FONT_COLOR);
         trainIcon(graphics);
         text(graphics, tr("speed"), 16, 86, 46, MUTED_TEXT);
         text(graphics, Component.literal(speed()), 68, 86, 40, INSET_TEXT);
-        textTips.add(new TextTip(new Rect2i(leftPos + 16, topPos + 85, 94, 12),
-                tr("speed_details", String.format(Locale.ROOT, "%.3f", status.getDouble("Speed")))));
+        textTips.add(
+                new TextTip(
+                        new Rect2i(leftPos + 16, topPos + 85, 94, 12),
+                        tr(
+                                "speed_details",
+                                String.format(Locale.ROOT, "%.3f", status.getDouble("Speed")))));
         text(graphics, tr("station"), 16, 103, 92, MUTED_TEXT);
         String station = status.getString("Station");
-        text(graphics, station.isEmpty() || station.equals("None") ? tr("no_station")
-                : Component.literal(station), 16, 116, 92, INSET_TEXT);
+        text(
+                graphics,
+                station.isEmpty() || station.equals("None")
+                        ? tr("no_station")
+                        : Component.literal(station),
+                16,
+                116,
+                92,
+                INSET_TEXT);
         text(graphics, tr("control_mode"), 16, 133, 92, MUTED_TEXT);
         text(graphics, named("mode", status.getString("Mode")), 16, 145, 92, INSET_TEXT);
         text(graphics, named("state", status.getString("State")), 16, 163, 92, INSET_TEXT);
@@ -522,21 +822,48 @@ public final class ControllerScreen extends AbstractSimiContainerScreen<Controll
             text(graphics, tr("manual_hint"), 124, 161, 168, AllGuiTextures.FONT_COLOR);
         } else {
             List<CompoundTag> fields = fields();
+            if (view == Page.CONFIGURATION && status.getString("Profile").isEmpty()) {
+                text(graphics, tr("profile_selection_prompt"), 124, 87, 168,
+                        AllGuiTextures.FONT_COLOR);
+                text(graphics, tr("profile_selection_hint"), 124, 102, 168,
+                        AllGuiTextures.FONT_COLOR);
+            }
             for (int i = page * rows(); i < Math.min(fields.size(), (page + 1) * rows()); i++) {
                 int y = rowY(i);
-                int labelWidth = fields.get(i).getString("Editor").equals("STATION")
-                        && !customStationFields.contains(fields.get(i).getString("Key")) ? 78 : 98;
-                text(graphics, fieldLabel(fields.get(i)), 124, y + 4, labelWidth, AllGuiTextures.FONT_COLOR);
+                int labelWidth =
+                        fields.get(i).getString("Editor").equals("STATION")
+                                        && !customStationFields.contains(
+                                                fields.get(i).getString("Key"))
+                                ? 78
+                                : 98;
+                text(
+                        graphics,
+                        fieldLabel(fields.get(i)),
+                        124,
+                        y + 4,
+                        labelWidth,
+                        AllGuiTextures.FONT_COLOR);
                 if (!fields.get(i).getString("Key").equals("@backend"))
                     recess(graphics, leftPos + VALUE_X, topPos + y, VALUE_WIDTH, 16, false);
             }
         }
-        if (pages > 1) text(graphics, Component.literal((page + 1) + "/" + pages),
-                220, 191, 24, AllGuiTextures.FONT_COLOR);
-        Component bottom = error.isEmpty()
-                ? tr("status_bar", String.format(Locale.ROOT, "%.0f%%", status.getDouble("Inventory") * 100),
-                        speed(), named("state", status.getString("State")))
-                : tr("error", error);
+        if (pages > 1)
+            text(
+                    graphics,
+                    Component.literal((page + 1) + "/" + pages),
+                    220,
+                    191,
+                    24,
+                    AllGuiTextures.FONT_COLOR);
+        Component bottom =
+                error.isEmpty()
+                        ? tr(
+                                "status_bar",
+                                String.format(
+                                        Locale.ROOT, "%.0f%%", status.getDouble("Inventory") * 100),
+                                speed(),
+                                named("state", status.getString("State")))
+                        : tr("error", error);
         text(graphics, bottom, 14, 210, 276, error.isEmpty() ? INSET_TEXT : 0xffb29a);
     }
 
@@ -549,14 +876,25 @@ public final class ControllerScreen extends AbstractSimiContainerScreen<Controll
         }
         TrainIconType icon = TrainIconType.byId(id);
         int width = icon.getIconWidth(TrainIconType.ENGINE);
-        for (int i = 1; i < carriages.length; i++) width += 1 + icon.getIconWidth(
-                i == carriages.length - 1 && status.getBoolean("DoubleEnded")
-                        ? TrainIconType.FLIPPED_ENGINE : carriages[i]);
+        for (int i = 1; i < carriages.length; i++)
+            width +=
+                    1
+                            + icon.getIconWidth(
+                                    i == carriages.length - 1 && status.getBoolean("DoubleEnded")
+                                            ? TrainIconType.FLIPPED_ENGINE
+                                            : carriages[i]);
         graphics.enableScissor(leftPos + 16, topPos + 64, leftPos + 110, topPos + 79);
         int x = leftPos + 16 + (width <= 94 ? (94 - width) / 2 : 94 - width);
         for (int i = carriages.length - 1; i > 0; i--)
-            x += icon.render(i == carriages.length - 1 && status.getBoolean("DoubleEnded")
-                    ? TrainIconType.FLIPPED_ENGINE : carriages[i], graphics, x, topPos + 67) + 1;
+            x +=
+                    icon.render(
+                                    i == carriages.length - 1 && status.getBoolean("DoubleEnded")
+                                            ? TrainIconType.FLIPPED_ENGINE
+                                            : carriages[i],
+                                    graphics,
+                                    x,
+                                    topPos + 67)
+                            + 1;
         icon.render(TrainIconType.ENGINE, graphics, x, topPos + 67);
         graphics.disableScissor();
     }
@@ -565,11 +903,18 @@ public final class ControllerScreen extends AbstractSimiContainerScreen<Controll
     protected void renderForeground(GuiGraphics graphics, int mouseX, int mouseY, float partial) {
         renderTooltip(graphics, mouseX, mouseY);
         for (GuiEventListener child : children()) {
-            if (child instanceof AbstractSimiWidget widget && widget.visible && widget.isMouseOver(mouseX, mouseY)) {
+            if (child instanceof AbstractSimiWidget widget
+                    && widget.visible
+                    && widget.isMouseOver(mouseX, mouseY)) {
                 List<Component> tooltip = new ArrayList<>(widget.getToolTip());
-                if (!widget.active) tooltip.add(tr("stop_before_editing").withStyle(ChatFormatting.GRAY));
+                if (!widget.active
+                        && status.getBoolean("Enabled")
+                        && (configurationWidgets.contains(widget) || widget == start))
+                    tooltip.add(tr("stop_before_editing").withStyle(ChatFormatting.GRAY));
                 if (widget.getY() == topPos + 45 && !status.getString("TrainId").isEmpty())
-                    tooltip.add(Component.literal(status.getString("TrainId")).withStyle(ChatFormatting.DARK_GRAY));
+                    tooltip.add(
+                            Component.literal(status.getString("TrainId"))
+                                    .withStyle(ChatFormatting.DARK_GRAY));
                 showTooltip(graphics, tooltip, mouseX, mouseY);
                 return;
             }
@@ -588,8 +933,14 @@ public final class ControllerScreen extends AbstractSimiContainerScreen<Controll
         int maxWidth = Math.min(220, width - 24);
         for (Component line : lines) {
             if (line.getString().startsWith("> ")) wrapped.add(ellipsize(line, maxWidth));
-            else font.getSplitter().splitLines(line, maxWidth, Style.EMPTY).forEach(
-                    part -> wrapped.add(Component.literal(part.getString()).setStyle(line.getStyle())));
+            else
+                font.getSplitter()
+                        .splitLines(line, maxWidth, Style.EMPTY)
+                        .forEach(
+                                part ->
+                                        wrapped.add(
+                                                Component.literal(part.getString())
+                                                        .setStyle(line.getStyle())));
         }
         int maxLines = Math.max(4, (height - 24) / 10);
         if (wrapped.size() > maxLines) {
@@ -601,7 +952,8 @@ public final class ControllerScreen extends AbstractSimiContainerScreen<Controll
 
     @Override
     public boolean keyPressed(int key, int scan, int modifiers) {
-        if ((key == GLFW.GLFW_KEY_ENTER || key == GLFW.GLFW_KEY_KP_ENTER) && getFocused() instanceof EditBox) {
+        if ((key == GLFW.GLFW_KEY_ENTER || key == GLFW.GLFW_KEY_KP_ENTER)
+                && getFocused() instanceof EditBox) {
             drafts.forEach(pending::put);
             flushEdits();
             return true;

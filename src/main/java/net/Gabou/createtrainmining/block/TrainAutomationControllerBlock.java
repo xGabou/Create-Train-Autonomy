@@ -4,14 +4,16 @@ import com.mojang.serialization.MapCodec;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
-import net.minecraft.world.item.context.BlockPlaceContext;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.context.BlockPlaceContext;
+import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.BaseEntityBlock;
-import net.minecraft.world.level.block.RenderShape;
+import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Mirror;
+import net.minecraft.world.level.block.RenderShape;
 import net.minecraft.world.level.block.Rotation;
 import net.minecraft.world.level.block.entity.*;
 import net.minecraft.world.level.block.state.BlockState;
@@ -19,8 +21,6 @@ import net.minecraft.world.level.block.state.StateDefinition;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.block.state.properties.DirectionProperty;
 import net.minecraft.world.level.block.state.properties.EnumProperty;
-import net.minecraft.world.level.BlockGetter;
-import net.minecraft.world.level.block.Block;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.shapes.CollisionContext;
 import net.minecraft.world.phys.shapes.Shapes;
@@ -28,17 +28,23 @@ import net.minecraft.world.phys.shapes.VoxelShape;
 
 public final class TrainAutomationControllerBlock extends BaseEntityBlock {
     public static final DirectionProperty FACING = BlockStateProperties.HORIZONTAL_FACING;
-    public static final EnumProperty<ControllerLamp> LAMP = EnumProperty.create("lamp", ControllerLamp.class);
-    private static final VoxelShape SHAPE = Shapes.or(
-            Block.box(0, 0, 0, 16, 2, 16),
-            Block.box(1, 2, 1, 15, 13, 15),
-            Block.box(.5, 13, .5, 15.5, 15.5, 15.5));
+    public static final EnumProperty<ControllerLamp> LAMP =
+            EnumProperty.create("lamp", ControllerLamp.class);
+    private static final VoxelShape SHAPE =
+            Shapes.or(
+                    Block.box(0, 0, 0, 16, 2, 16),
+                    Block.box(1, 2, 1, 15, 13, 15),
+                    Block.box(0, 13, 0, 16, 15, 16));
     public static final MapCodec<TrainAutomationControllerBlock> CODEC =
             simpleCodec(TrainAutomationControllerBlock::new);
 
     public TrainAutomationControllerBlock(Properties properties) {
         super(properties);
-        registerDefaultState(stateDefinition.any().setValue(FACING, Direction.NORTH).setValue(LAMP, ControllerLamp.INACTIVE));
+        registerDefaultState(
+                stateDefinition
+                        .any()
+                        .setValue(FACING, Direction.NORTH)
+                        .setValue(LAMP, ControllerLamp.INACTIVE));
     }
 
     protected void createBlockStateDefinition(StateDefinition.Builder<Block, BlockState> builder) {
@@ -57,7 +63,8 @@ public final class TrainAutomationControllerBlock extends BaseEntityBlock {
         return rotate(state, mirror.getRotation(state.getValue(FACING)));
     }
 
-    protected VoxelShape getShape(BlockState state, BlockGetter level, BlockPos pos, CollisionContext context) {
+    protected VoxelShape getShape(
+            BlockState state, BlockGetter level, BlockPos pos, CollisionContext context) {
         return SHAPE;
     }
 
@@ -75,7 +82,8 @@ public final class TrainAutomationControllerBlock extends BaseEntityBlock {
 
     public <T extends BlockEntity> BlockEntityTicker<T> getTicker(
             Level level, BlockState state, BlockEntityType<T> type) {
-        return level.isClientSide
+        // Only real server worlds run the controller; Ponder scenes animate the lamp themselves.
+        return !(level instanceof net.minecraft.server.level.ServerLevel)
                 ? null
                 : createTickerHelper(
                         type,

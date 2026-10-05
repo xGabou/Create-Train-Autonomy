@@ -64,6 +64,7 @@ neoForge {
         // The gametest system is also enabled by default for other run configs under the /test command.
         gameTestServer {
             type = "gameTestServer"
+            gameDirectory = project.file(providers.gradleProperty('gameTestDirectory').orElse('run').get())
             systemProperty 'neoforge.enabledGameTestNamespaces', project.mod_id
         }
 
@@ -123,8 +124,11 @@ dependencies {
         runtimeOnly 'curse.maven:create-additional-logistics-1359885:7460280'
     if (providers.gradleProperty('withRailwaysAdditions').orElse('false').get().toBoolean())
         runtimeOnly 'curse.maven:railways-additions-1580820:8407753'
+    if (providers.gradleProperty('withThreadedTrains').orElse('false').get().toBoolean())
+        runtimeOnly 'maven.modrinth:RYJzdkDr:ry1hvo4l'
     testImplementation 'org.junit.jupiter:junit-jupiter:5.11.4'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    implementation "curse.maven:jei-238222:9009406"
     // Example mod dependency with JEI
     // The JEI API is declared for compile time use, while the full JEI artifact is used at runtime
     // compileOnly "mezz.jei:jei-${mc_version}-common-api:${jei_version}"

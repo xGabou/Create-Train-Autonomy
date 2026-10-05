@@ -45,12 +45,19 @@ public final class TrainAutomationControllerBlockEntity extends BlockEntity
         if (level.getGameTime() % 10 == 0) {
             var c = entity.controller();
             ControllerLamp lamp = ControllerLamp.INACTIVE;
-            if (!c.getLastError().isEmpty() || c.getControlMode() == net.Gabou.createtrainmining.api.ControlMode.ERROR)
+            if (!c.getLastError().isEmpty()
+                    || c.getControlMode() == net.Gabou.createtrainmining.api.ControlMode.ERROR)
                 lamp = ControllerLamp.ERROR;
-            else if (c.isEnabled() || c.getControlMode() == net.Gabou.createtrainmining.api.ControlMode.DIRECT_CONTROL
-                    || c.getControlMode() == net.Gabou.createtrainmining.api.ControlMode.SCHEDULE_CONTROL) {
+            else if (c.isEnabled()
+                    || c.getControlMode()
+                            == net.Gabou.createtrainmining.api.ControlMode.DIRECT_CONTROL
+                    || c.getControlMode()
+                            == net.Gabou.createtrainmining.api.ControlMode.SCHEDULE_CONTROL) {
                 try {
-                    lamp = Math.abs(c.getCurrentSpeed()) > 0.0001 ? ControllerLamp.RUNNING : ControllerLamp.WAITING;
+                    lamp =
+                            Math.abs(c.getCurrentSpeed()) > 0.0001
+                                    ? ControllerLamp.RUNNING
+                                    : ControllerLamp.WAITING;
                 } catch (RuntimeException unavailable) {
                     lamp = ControllerLamp.ERROR;
                 }

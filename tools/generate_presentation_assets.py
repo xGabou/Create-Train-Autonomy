@@ -217,7 +217,7 @@ model["elements"] = model["elements"][:3] + [
     cuboid([13.5, 3.5, .5], [14, 11.5, 1.1], front="#brass", sides="#brass", up="#brass"),
     {"from": [2.5, 3.5, .75], "to": [13.5, 11.5, 1.05],
      "faces": {"north": {"uv": [0, 0, 16, 16], "texture": "#front"}}},
-    {"from": [11, 12.05, .5], "to": [13, 12.95, 1.1],
+    {"from": [11, 12.05, .5], "to": [13, 12.95, 1.1], "shade": False,
      "faces": {"north": {"uv": [0, 0, 16, 16], "texture": "#lamp"}}},
 ]
 write_json(ASSETS / "models/block/train_automation_controller.json", model)

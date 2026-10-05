@@ -1,9 +1,10 @@
 package net.Gabou.createtrainmining.client;
 
 import com.simibubi.create.foundation.item.ItemDescription;
-import net.createmod.catnip.lang.FontHelper;
+
 import net.Gabou.createtrainmining.Createtrainmining;
 import net.Gabou.createtrainmining.block.ModBlocks;
+import net.createmod.catnip.lang.FontHelper;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
@@ -15,7 +16,9 @@ public final class ControllerTooltips {
     @SubscribeEvent
     public static void tooltip(ItemTooltipEvent event) {
         if (!event.getItemStack().is(ModBlocks.CONTROLLER_ITEM.get())) return;
-        var description = ItemDescription.create(ModBlocks.CONTROLLER_ITEM.get(), FontHelper.Palette.STANDARD_CREATE);
+        var description =
+                ItemDescription.create(
+                        ModBlocks.CONTROLLER_ITEM.get(), FontHelper.Palette.STANDARD_CREATE);
         if (description != null) event.getToolTip().addAll(1, description.getCurrentLines());
     }
 }

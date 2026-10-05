@@ -82,6 +82,16 @@ public final class TrainAutomationManager {
         }
     }
 
+    public static void beforeActorTick(
+            com.simibubi.create.content.trains.entity.CarriageContraptionEntity entity) {
+        var level = entity.level();
+        if (level.isClientSide || level.getServer() == null) return;
+        var carriage = entity.getCarriage();
+        if (carriage == null || carriage.train == null) return;
+        var controller = get(level.getServer()).owner(carriage.train.id);
+        if (controller != null) controller.tickActorControls(entity);
+    }
+
     public static void shutdown(MinecraftServer server) {
         var manager = SERVERS.remove(server);
         if (manager != null) ListCopy.stop(manager);

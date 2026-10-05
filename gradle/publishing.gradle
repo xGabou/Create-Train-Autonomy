@@ -75,6 +75,9 @@ def publishingChecks = []
             if (!changelogFile.isFile() || changelogFile.text.trim().isEmpty()) {
                 throw new GradleException("Write release notes in ${changelogFile.name} before publishing.")
             }
+            if (debugUpload) {
+                logger.lifecycle("${platform.platform} publishing is in PREVIEW mode; no upload will occur. Use -Ppublish_debug=false to publish.")
+            }
         }
     }
     publishingChecks.add(validationTask)

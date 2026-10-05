@@ -310,11 +310,23 @@ public final class TrainController {
 
     public boolean setActorTypeEnabled(ResourceLocation type, boolean enabled) {
         claim();
-        return actors.setActorTypeEnabled(getSelectedTrain(), type, enabled);
+        boolean changed = actors.setActorTypeEnabled(getSelectedTrain(), type, enabled);
+        actors.tickPauses(getSelectedTrain());
+        return changed;
     }
 
     public boolean isActorTypeEnabled(ResourceLocation type) {
         return actors.isActorTypeEnabled(getSelectedTrain(), type);
+    }
+
+    public void setPausedActorTypes(Set<ResourceLocation> types) {
+        claim();
+        actors.setPausedTypes(getSelectedTrain(), types);
+    }
+
+    public boolean hasSlopeNearTrain(DriveDirection direction, double lookAhead) {
+        checkThread();
+        return TrainTrackProbe.hasSlopeNearTrain(getSelectedTrain().unwrap(), direction, lookAhead);
     }
 
     public ControlMode getControlMode() {
@@ -436,6 +448,7 @@ public final class TrainController {
         if (!owns()) return;
         var train = Create.RAILWAYS.trains.get(selectedTrain);
         if (train != null) {
+            actors.setPausedTypes(getSelectedTrain(), Set.of());
             boolean wasDirect = backend.isDriving(train);
             resetManual(train);
             train.runtime.paused = true;
@@ -447,8 +460,10 @@ public final class TrainController {
     }
 
     private void releaseIfIdle() {
-        if (!enabled && mode == ControlMode.IDLE && owns())
+        if (!enabled && mode == ControlMode.IDLE && owns()) {
+            actors.setPausedTypes(getSelectedTrain(), Set.of());
             manager.ownership().release(selectedTrain, controllerId);
+        }
     }
 
     public void requireExternalControl() {
@@ -497,6 +512,19 @@ public final class TrainController {
                     releaseIfIdle();
                 }
             }
+            if (enabled) profile.beforeTrainTick(context);
+            actors.tickPauses(getSelectedTrain());
+        } catch (RuntimeException e) {
+            fail(e);
+        }
+    }
+
+    /** Also cover contraptions created by chunk loading after Train.tick's movement hook. */
+    public void tickActorControls(com.simibubi.create.content.trains.entity.CarriageContraptionEntity entity) {
+        if (!owns()) return;
+        try {
+            if (enabled) profile.beforeTrainTick(context);
+            actors.tickPauses(entity);
         } catch (RuntimeException e) {
             fail(e);
         }

@@ -1,0 +1,16 @@
+{
+	// Whether workstation blocks (crafting table, stonecutter, anvil, etc.) can be used on trains. When enabled, players can open workstation GUIs by interacting with these blocks on moving contraptions.
+	"contraptionWorkstations": false,
+	// Whether players can sleep in beds placed on trains. When enabled, players can use beds on moving contraptions to sleep and set their respawn point.
+	"contraptionBedSleeping": false,
+	// Enable solid collision for Create train tracks. When enabled, tracks have full collision shapes so players don't fall through. Applies to both straight tracks and curved (bezier) track segments.
+	"solidTrackCollision": true,
+	// Keep Create's Train Network Overlay readable on Xaero's World Map by enforcing a minimum on-screen size for track lines and station/train markers as you zoom out. When zoomed in, the overlay looks unchanged. Has no effect unless both Create and Xaero's World Map are installed.
+	"scaleTrainMapOverlayWithZoom": true,
+	// Keep Create's Train Network Overlay readable on JourneyMap by enforcing a minimum on-screen size for track lines and station/train markers as you zoom out. JourneyMap already supports zooming out much further than Xaero by default. Has no effect unless both Create and JourneyMap are installed.
+	"scaleJourneyMapTrainOverlayWithZoom": true,
+	// Let Xaero's World Map zoom out further than its built-in limit (1/16x). Useful for seeing a whole train network at once. Has no effect unless Xaero's World Map is installed.
+	"extendXaeroZoomOut": true,
+	// Minimum Xaero map zoom level when extendXaeroZoomOut is enabled. Lower values zoom out further (more area, less detail). Xaero's default limit is 0.0625 (1/16x); 0.015625 is 1/64x. Only applies when extendXaeroZoomOut is true.
+	"xaeroMinZoom": 0.015625
+}

@@ -13,6 +13,15 @@ import java.util.UUID;
 public final class ControllerNetworking {
     public static void register(RegisterPayloadHandlersEvent event) {
         var registrar = event.registrar("1");
+        registrar.playToClient(
+                ActorPausePayload.TYPE,
+                ActorPausePayload.CODEC,
+                (packet, context) -> context.enqueueWork(() -> {
+                    var entity = context.player().level().getEntity(packet.entityId());
+                    if (entity instanceof com.simibubi.create.content.contraptions.AbstractContraptionEntity c
+                            && c.getContraption() != null)
+                        TrainActorController.applyPause(c.getContraption(), packet.filter(), packet.paused());
+                }));
         registrar.playToServer(
                 ControllerCommandPayload.TYPE,
                 ControllerCommandPayload.CODEC,
@@ -120,11 +129,21 @@ public final class ControllerNetworking {
             var createTrain = com.simibubi.create.Create.RAILWAYS.trains.get(train.getId());
             if (createTrain != null) {
                 tag.putString("TrainIcon", createTrain.icon.getId().toString());
-                tag.putIntArray("CarriageLengths", createTrain.carriages.stream().mapToInt(carriage -> carriage.bogeySpacing).toArray());
+                tag.putIntArray(
+                        "CarriageLengths",
+                        createTrain.carriages.stream()
+                                .mapToInt(carriage -> carriage.bogeySpacing)
+                                .toArray());
                 tag.putBoolean("DoubleEnded", createTrain.doubleEnded);
-                double manualMaximum = createTrain.maxSpeed()
-                        * com.simibubi.create.infrastructure.config.AllConfigs.server().trains.manualTrainSpeedModifier.getF();
-                tag.putDouble("SpeedRatio", manualMaximum <= 0 ? 0 : Math.abs(train.getSpeed()) / manualMaximum);
+                double manualMaximum =
+                        createTrain.maxSpeed()
+                                * com.simibubi.create.infrastructure.config.AllConfigs.server()
+                                        .trains
+                                        .manualTrainSpeedModifier
+                                        .getF();
+                tag.putDouble(
+                        "SpeedRatio",
+                        manualMaximum <= 0 ? 0 : Math.abs(train.getSpeed()) / manualMaximum);
             }
             tag.putString("Direction", c.getDirection().name());
             tag.putDouble("Inventory", train.getInventory().getUsageRatio());
