@@ -95,8 +95,11 @@ public final class TrainAutomationControllerBlock extends BaseEntityBlock {
             BlockState state, Level level, BlockPos pos, BlockState replacement, boolean moved) {
         if (!level.isClientSide
                 && state.getBlock() != replacement.getBlock()
-                && level.getBlockEntity(pos) instanceof TrainAutomationControllerBlockEntity entity)
+                && level.getBlockEntity(pos) instanceof TrainAutomationControllerBlockEntity entity) {
+            net.Gabou.createtrainmining.core.NamedControllerSavedData.get(level.getServer())
+                    .forget((net.minecraft.server.level.ServerLevel) level, pos);
             entity.controller().stop();
+        }
         super.onRemove(state, level, pos, replacement, moved);
     }
 

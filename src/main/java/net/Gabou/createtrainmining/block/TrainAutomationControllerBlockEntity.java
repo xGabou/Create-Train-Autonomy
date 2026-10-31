@@ -1,10 +1,13 @@
 package net.Gabou.createtrainmining.block;
 
 import net.Gabou.createtrainmining.core.TrainController;
+import net.Gabou.createtrainmining.core.ControllerChunkLoader;
+import net.Gabou.createtrainmining.api.ControlMode;
 import net.Gabou.createtrainmining.network.ControllerMenu;
 import net.minecraft.core.*;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.MenuProvider;
 import net.minecraft.world.entity.player.*;
 import net.minecraft.world.inventory.AbstractContainerMenu;
@@ -16,6 +19,7 @@ public final class TrainAutomationControllerBlockEntity extends BlockEntity
         implements MenuProvider {
     private CompoundTag saved = new CompoundTag();
     private TrainController controller;
+    private boolean chunkForced;
 
     public TrainAutomationControllerBlockEntity(BlockPos pos, BlockState state) {
         super(ModBlocks.CONTROLLER_ENTITY.get(), pos, state);
@@ -28,11 +32,37 @@ public final class TrainAutomationControllerBlockEntity extends BlockEntity
             controller =
                     new TrainController(
                             level.getServer(),
-                            this::setChanged,
+                            this::onControllerChanged,
                             () -> level.getBestNeighborSignal(worldPosition));
             controller.load(saved);
+            updateChunkLoading();
         }
         return controller;
+    }
+
+    /** Read saved intent during ticket validation without starting automation. */
+    public boolean shouldKeepLoaded() {
+        return controller == null ? saved.getBoolean("Enabled")
+                : controller.isEnabled() || controller.getControlMode() == ControlMode.DIRECT_CONTROL
+                        || controller.getControlMode() == ControlMode.SCHEDULE_CONTROL;
+    }
+
+    private void onControllerChanged() {
+        setChanged();
+        updateChunkLoading();
+    }
+
+    private void updateChunkLoading() {
+        if (!(level instanceof ServerLevel serverLevel)) return;
+        boolean keepLoaded = shouldKeepLoaded();
+        if (keepLoaded == chunkForced) return;
+        ControllerChunkLoader.setLoaded(serverLevel, worldPosition, keepLoaded);
+        chunkForced = keepLoaded;
+    }
+
+    public void onLoad() {
+        super.onLoad();
+        if (level instanceof ServerLevel) controller();
     }
 
     public static void tick(

@@ -1,3 +1,45 @@
+# Create Train Automation 1.9
+
+### New
+- Named controller commands for remote status, start, retry, cancel, and return-to-base control, with persistent cross-dimension addresses and command suggestions.
+- Optional station deployer protection with a configurable radius (100 blocks by default, disabled until enabled).
+- Optional lava clearing around active mining drill faces, enabled by default, to reduce lava/water generators.
+
+### Fixed
+- Train drills break obsidian and crying obsidian faster, finishing before stuck recovery.
+- Level train deployers no longer infer false track slopes from adjacent solid blocks, including fluid-generated stone.
+- Direct-drive signal reservations publish train ownership immediately and release stale reservations before rescanning.
+
+# Create Train Automation 1.8
+
+### Fixed
+- Mining trains finish unloading at the cargo threshold or after five minutes without cargo changes, allowing retained rails and supplies to stay aboard without blocking automatic resume. Cargo changes reset the timer, and its deadline survives reloads.
+- Unloading completion respects the automatic resume setting and keeps trains sent home after repeated jams stopped at base.
+
+# Create Train Automation 1.7
+
+### Fixed
+- Moving mechanical drills now break cobwebs, kelp, seagrass, vines, sculk veins and short grass, fixing [Create #8448](https://github.com/Creators-of-Create/Create/issues/8448). The fix applies to all moving contraptions, including trains without an automation controller, and preserves Create's normal drops, inventory collection, fluid replacement and protected-block rules.
+
+# Create Train Automation 1.5
+
+### Fixed
+- Returning mining trains preserve their portable storage interface connection when holding at the station, allowing base-side cargo extraction. Unloading starts only after the train has stopped and navigation has finished.
+- Added **Pause tools when not mining**, enabled by default, to pause drills and deployers during return and unloading while leaving storage interfaces active and preserving manual actor settings.
+- The fourth consecutive mining jam sends a chat warning, pauses mining for ten minutes, then sends the train home. The jam count and deadline survive reloads; the train stays at base after unloading until manually restarted.
+
+### New
+- Active Train Automation Controllers keep their own chunk loaded and ticking, so automation continues when players travel away. Enabled profiles retain their chunk ticket across server restarts.
+- A moving area around every controlled carriage stays loaded and entity-ticking, allowing drills and deployers to keep working far from players. Old train chunks are released as the train moves; the entire route is not kept loaded.
+- Stopping, errors, player takeover, and block removal release the controller's ticket. Multiple controllers in one chunk keep independent tickets; stale tickets are cleaned up on world load.
+
+# Create Train Automation 1.4
+
+### Fixed
+- Mining trains that stop making position progress for 5 seconds now back up about 10 blocks and retry automatically, even when the train reports speed while stuck inside blocks. Recovery works in either mining direction.
+- Drills and deployers pause during the retreat and resume with their previous control settings when mining retries. Signal waits, unloaded chunks, slope tool pauses, and a zero mining speed do not trigger recovery.
+- Recovery preserves its remaining retreat distance across controller reloads. If the retreat is also blocked, mining retries from the available position; full cargo still takes priority and returns to the station.
+
 # Create Train Automation 1.3
 
 ### Fixed

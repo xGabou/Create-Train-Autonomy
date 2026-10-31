@@ -169,8 +169,10 @@ public class NativeCreateDriveBackend implements TrainDriveBackend {
     private static void releaseReservations(Train train) {
         for (UUID id : train.reservedSignalBlocks) {
             var group = Create.RAILWAYS.signalEdgeGroups.get(id);
-            if (group != null && !train.occupiedSignalBlocks.containsKey(id))
-                group.trains.remove(train);
+            if (group != null) {
+                if (group.trains.stream().allMatch(t -> t == train)) group.reserved = null;
+                if (!train.occupiedSignalBlocks.containsKey(id)) group.trains.remove(train);
+            }
         }
         train.reservedSignalBlocks.clear();
     }
@@ -243,6 +245,8 @@ public class NativeCreateDriveBackend implements TrainDriveBackend {
         }
 
         void reserve(SignalEdgeGroup group, SignalBoundary signal) {
+            // Publish ownership immediately, including to other direct-drive trains this tick.
+            group.trains.add(train);
             group.reserved = signal;
             train.reservedSignalBlocks.add(group.id);
         }

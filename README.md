@@ -26,6 +26,10 @@ Create is resolved from its official Maven repository as `create-1.21.1:6.0.10-2
 
 The distributable jar is in `build/libs`. Development GameTests and their empty structure are excluded from the jar.
 
+### Moving drill fix
+
+Moving drills can break blocks with no collision shape, including cobwebs, kelp, seagrass, vines, sculk veins and short grass ([Create #8448](https://github.com/Creators-of-Create/Create/issues/8448)). This applies to all moving Create contraptions, including trains without an automation controller. Create still handles breaking progress, drops, inventory collection and fluid replacement; air, fluids, tracks, unbreakable blocks and the `create:non_breakable` tag remain protected.
+
 ### Create Threaded Trains compatibility
 
 When Create Threaded Trains 1.0.0 is installed, an optional compatibility hook runs its railway task immediately on the server thread. Railway ticks still run once per server tick, and its normal task/future lifecycle is preserved. This prevents automation callbacks, slope checks, and tool controls from accessing world state on the train worker. It disables parallel ticking for the entire railway network while both mods are installed, including trains without a controller; this avoids races when a controller selects or claims a train during the server tick. A one-time warning in the server log makes the fallback visible. Without the addon, no compatibility hook is loaded and Create's normal ticking is unchanged.
@@ -62,6 +66,26 @@ Direct speed is a fraction from **0 to 1** of Create's configured manual maximum
 
 Stop an active profile before using external low-level movement controls or changing its settings. Profile callbacks themselves operate through the same `TrainController` facade.
 
+## Remote controller commands
+
+Operators (permission level 2) can give a controller a unique station name and control it from anywhere, including another dimension. Look at the controller within eight blocks and run:
+
+```mcfunction
+/trainautomation name "Quarry One"
+/trainautomation list
+/trainautomation station "Quarry One" status
+/trainautomation station "Quarry One" start
+/trainautomation station "Quarry One" retry
+/trainautomation station "Quarry One" cancel
+/trainautomation station "Quarry One" return
+```
+
+`start` starts the configured profile. `retry` restarts it with fresh recovery counters while keeping its train and settings. `cancel` (or `stop`) stops automation and movement. `return` requires running automation; the mining profile immediately returns to its configured return station, unloads normally, then stays stopped at base even with automatic resume enabled. These commands retain normal train ownership, conductor, route, signal, and player-control checks.
+
+Names identify controller blocks; they do not rename Create track stations or change the mining return destination. Names support spaces when quoted and appear in command suggestions. Naming the same block again renames it; duplicate names on other controllers are rejected. Names survive world restarts and inactive chunks are loaded on demand. Breaking a controller removes its name; a stale name cannot control a replacement block.
+
+For a console or explicit coordinates in the command's dimension, use `/trainautomation name "Quarry One" at <x> <y> <z>` with a loaded controller. Use `/execute in <dimension> run ...` to name a controller in another dimension.
+
 ## Core API
 
 - `api/AutomationProfile`, `AutomationContext`, `ConfigurationField`: independently instantiated profile lifecycle, callbacks, configuration and persistent state.
@@ -95,7 +119,7 @@ Entering direct control pauses ScheduleRuntime and cancels its navigation/reserv
 
 Controller NBT saves its identity, selected train UUID, profile ID, validated configuration, backend ID, enabled state, profile state/data and last error. Chunk unloading suspends movement and releases the live lease; enabled profiles reconstruct their intent when reloaded. Removing a controller stops its train. Ownership is also saved at world level so a train cannot resume stale navigation ahead of its controller after a restart. Missing trains, invalid graphs, derailment and ownership conflicts stop automation with an error.
 
-Low-level manual requests are intentionally stopped on controller unload and are not automatically restarted. Persistent automation belongs to profiles. Chunk waiting follows Create's normal behavior; this framework does not force-load remote train or controller chunks.
+Active controller blocks keep their own chunk loaded and ticking, so walking away does not suspend automation. The controller also keeps a moving area around every carriage loaded and entity-ticking, including carriage anchors, bogeys, and loaded contraption bounds with a one-chunk margin. This keeps drills and deployers operating when the train is far from players, rather than only moving its virtual track position. New chunks load before old chunks are released; the entire railway route is not kept loaded. Each controller owns separate tickets. Enabled profiles retain the controller ticket across server shutdowns and resume after restart, rebuilding the train footprint from its current position; stale tickets for missing or inactive blocks and old train footprints are removed on world load. Stopping, player takeover, errors, and block removal release tickets. Manual direct driving and active station schedules also keep the controller and train loaded while running, but manual requests stop on shutdown and do not automatically restart. The server must be running and unpaused.
 
 ## Mining profile
 
@@ -103,11 +127,17 @@ Only `automation/mining` contains the mining workflow:
 
 `STOPPED -> MINING -> RETURNING -> UNLOADING -> RESUMING -> MINING`
 
-Select a train with cargo storage and a conductor, choose `mining`, and configure its return station. The profile drives stationlessly in its configured outbound direction. At the return threshold it switches to a normal Create station schedule. At the station it waits for the unload threshold, then resumes outbound direct motion when automatic resume is enabled.
+Select a train with cargo storage and a conductor, choose `mining`, and configure its return station. The profile drives stationlessly in its configured outbound direction. At the return threshold it switches to a normal Create station schedule. At the station it waits until cargo reaches the unload threshold **or** cargo remains unchanged for five minutes (6,000 server ticks), then resumes outbound direct motion when automatic resume is enabled. This allows rails and other retained supplies to stay aboard. Any change to cargo resets the inactivity timer; its deadline survives controller/world reloads. With automatic resume disabled, unloading completion stops automation instead.
 
-Configuration keys are `return_station`, `return_threshold`, `unload_threshold`, `mining_speed`, `outbound_direction`, `automatic_resume`, `track_deployer_control`, `pause_tools_on_slopes`, and `slope_lookahead`. Thresholds and speed use fractions. The unload threshold must be below a positive return threshold. The return station is not hardcoded.
+Configuration keys are `return_station`, `return_threshold`, `unload_threshold`, `mining_speed`, `outbound_direction`, `automatic_resume`, `pause_tools_when_not_mining`, `track_deployer_control`, `pause_tools_on_slopes`, `slope_lookahead`, `pause_deployers_near_stations`, `station_radius`, and `clear_lava`. Thresholds and speed use fractions. The unload threshold must be below a positive return threshold. The return station is not hardcoded.
+
+**Pause tools when not mining** is enabled by default in the profile settings. It temporarily disables drills and deployers while returning, unloading, and waiting to resume. Portable storage interfaces remain active. Tools resume when mining restarts, and manually disabled tools keep their saved settings. Stopping automation releases these temporary overrides. Arrival waits for a stopped train with finished navigation; holding at the station preserves Create's portable storage interface connection so the base can extract cargo.
 
 The optional deployer setting controls the Create deployer actor type on loaded carriages, including all deployers that support that actor filter; it does not infer which deployers are holding track. It defaults to disabled. The profile remembers the previous aggregate enabled state for stop cleanup. Contraption-wide actor disabling remains authoritative. The profile waits at the current track end so actors can extend the route.
+
+If active mining makes less than a quarter block of position progress for 5 seconds, the controller shows **Stuck: backing up**, pauses drills/deployers, retreats about 10 blocks in the opposite direction, and retries mining automatically. This works in either outbound direction and measures actual train position, even if the train reports speed while stuck. Signal waits, unloaded chunks, slope tool pauses, and a zero mining speed do not trigger recovery. Recovery still obeys signals and track safety. If the retreat itself cannot make progress for 5 seconds, mining retries from the available position. Full cargo takes priority and returns to the station. A controller reload preserves the remaining retreat distance; stopping or player takeover cancels recovery and restores tool settings.
+
+On the fourth consecutive mining jam, the controller sends one chat warning, stops movement and pauses tools, then returns to the configured station after 10 minutes of running server game time (12,000 ticks). Full cargo can trigger an earlier return. Replaying the retreat does not reset the jam count; advancing beyond the obstruction does. The count and return deadline survive controller/world reloads. After this return and unloading, automation stops even if automatic resume is enabled; restart it manually at base after addressing the obstruction.
 
 **Pause Tools on Slopes** is enabled by default in the mining profile's advanced settings (gear button). It temporarily pauses all Create deployers and mechanical drills when sloped track is ahead or under any carriage, while continuing to drive. **Slope Lookahead** defaults to 8 blocks and accepts 2–64 blocks, measured beyond the carriage/tool reach. Scouts sample track elevation, including curved slopes, in either mining direction. Tools resume after the rear carriage and its overhanging tools clear the slope. The controller shows **Slope: tools paused** during the crossing. No additional Contraption Controls block is required.
 
@@ -144,3 +174,9 @@ Unit tests cover lease conflicts/isolation, strict configuration parsing, reques
 Run the GameTests both with the base runtime and with all optional dependencies. The tests do not replace gameplay validation of an assembled actor-equipped train, portal/chunk-boundary transitions, collision behavior under load, and visual GUI layout. Actor control currently operates on loaded contraptions. Cross-signal scouting is bounded; unresolved chains stop conservatively at their entry.
 
 The native motion research and implementation boundaries are recorded in [docs/native-create-drive.md](docs/native-create-drive.md).
+
+Mining can optionally pause deployers near any station in the same dimension. Enable **Pause deployers near stations** and set **Station radius** (default 100 blocks, range 0?1024). Deployers resume after every loaded carriage leaves the radius; manual contraption-control disables remain in effect. This option defaults to off.
+
+**Clear lava around drills** defaults to on. While mining, the controller removes lava blocks within one block of active drill faces, including sources, without drops. Water and solid blocks remain; nearby lava can flow back and is cleared again as the miner advances. This reduces lava/water generators in the cutting path rather than draining entire lava lakes.
+
+Train drills break obsidian and crying obsidian faster so the miner can finish before jam recovery starts. Level train deployers also place flat rails beside obstructions instead of letting Create infer an unwanted ramp. Actual sloping train placement keeps Create's normal behavior. Direct mining and recovery obey signals, including occupied groups and cross-signal chains.

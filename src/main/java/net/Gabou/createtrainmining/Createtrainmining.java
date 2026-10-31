@@ -7,6 +7,7 @@ import net.Gabou.createtrainmining.compat.railwaysadditions.RailwaysAdditionsInt
 import net.Gabou.createtrainmining.core.*;
 import net.Gabou.createtrainmining.drive.NativeCreateDriveBackend;
 import net.Gabou.createtrainmining.network.ControllerNetworking;
+import net.Gabou.createtrainmining.command.ControllerCommands;
 import net.minecraft.world.item.CreativeModeTabs;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.ModList;
@@ -25,9 +26,11 @@ public final class Createtrainmining {
         AutomationProfileRegistry.register("mining", MiningAutomationProfile::new);
         RailwaysAdditionsIntegration.register();
         ModBlocks.register(bus);
+        bus.addListener(ControllerChunkLoader::register);
         bus.addListener(ControllerNetworking::register);
         bus.addListener(this::creativeTab);
         if (ModList.get().isLoaded("computercraft")) ComputerCraftIntegration.register(bus);
+        NeoForge.EVENT_BUS.addListener(ControllerCommands::register);
         NeoForge.EVENT_BUS.addListener(
                 (ServerStoppingEvent event) -> TrainAutomationManager.shutdown(event.getServer()));
     }

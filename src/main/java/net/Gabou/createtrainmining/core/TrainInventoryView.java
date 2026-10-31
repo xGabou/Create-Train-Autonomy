@@ -1,6 +1,8 @@
 package net.Gabou.createtrainmining.core;
 
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.core.HolderLookup;
+import net.minecraft.nbt.ListTag;
 import net.neoforged.neoforge.items.IItemHandler;
 
 import java.util.ArrayList;
@@ -92,7 +94,17 @@ public final class TrainInventoryView {
         return getUsedItemCount() == 0;
     }
 
-    int fingerprint() {
+    /** Serializable contents including empty slots, suitable for comparisons across server restarts. */
+    public ListTag snapshot(HolderLookup.Provider registries) {
+        var contents = new ListTag();
+        for (var handler : handlers())
+            for (int slot = 0; slot < handler.getSlots(); slot++)
+                contents.add(handler.getStackInSlot(slot).saveOptional(registries));
+        return contents;
+    }
+
+    /** Runtime content signature including item types, components, counts and slot order. */
+    public int fingerprint() {
         int hash = 1;
         for (var handler : handlers())
             for (int slot = 0; slot < handler.getSlots(); slot++) {

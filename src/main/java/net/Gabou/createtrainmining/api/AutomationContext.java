@@ -4,6 +4,7 @@ import net.Gabou.createtrainmining.core.ManagedTrain;
 import net.Gabou.createtrainmining.core.TrainController;
 import net.Gabou.createtrainmining.core.TrainInventoryView;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.core.HolderLookup;
 
 import java.util.List;
 import java.util.Map;
@@ -21,6 +22,8 @@ public interface AutomationContext {
     List<String> stations();
 
     long currentTime();
+
+    HolderLookup.Provider registries();
 
     Map<String, Object> configuration();
 

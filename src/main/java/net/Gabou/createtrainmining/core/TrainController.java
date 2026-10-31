@@ -7,6 +7,7 @@ import com.simibubi.create.content.trains.graph.EdgePointType;
 
 import net.Gabou.createtrainmining.api.*;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.neoforged.neoforge.common.NeoForge;
@@ -20,6 +21,7 @@ public final class TrainController {
     private final Runnable dirty;
     private final IntSupplier redstone;
     private final TrainAutomationManager manager;
+    private final TrainChunkLoader trainChunks;
     private final TrainScheduleController schedules = new TrainScheduleController();
     private final TrainActorController actors = new TrainActorController();
     private UUID controllerId = UUID.randomUUID(), selectedTrain;
@@ -52,6 +54,10 @@ public final class TrainController {
                     return server.overworld().getGameTime();
                 }
 
+                public net.minecraft.core.HolderLookup.Provider registries() {
+                    return server.registryAccess();
+                }
+
                 public Map<String, Object> configuration() {
                     return getConfig();
                 }
@@ -75,7 +81,11 @@ public final class TrainController {
 
     public TrainController(MinecraftServer server, Runnable dirty, IntSupplier redstone) {
         this.server = server;
-        this.dirty = dirty;
+        trainChunks = new TrainChunkLoader(server);
+        this.dirty = () -> {
+            dirty.run();
+            updateTrainChunks();
+        };
         this.redstone = redstone;
         manager = TrainAutomationManager.get(server);
     }
@@ -254,7 +264,16 @@ public final class TrainController {
 
     public void pauseSchedule() {
         var train = claim();
-        resetManual(train);
+        if (isDirectDriving()) resetManual(train);
+        else {
+            // cancelStall also clears PSI WorkingPos. Preserve docked actor connections when
+            // holding a schedule-driven train at its station.
+            TrainMovementIntegrations.suspend(train);
+            train.speed = train.targetSpeed = 0;
+            train.manualTick = false;
+            train.manualSteer = SteerDirection.NONE;
+            train.backwardsDriver = null;
+        }
         schedules.pauseSchedule(train);
         mode = ControlMode.IDLE;
         dirty.run();
@@ -274,6 +293,18 @@ public final class TrainController {
 
     public String getCurrentStation() {
         return getSelectedTrain().getCurrentStation();
+    }
+
+    public void broadcastMessage(Component message) {
+        checkThread();
+        server.getPlayerList().broadcastSystemMessage(message, false);
+    }
+
+    /** Recheck stationary interfaces after docking/reload, using Create's alignment checks. */
+    public void refreshStorageInterfaces() {
+        var train = claim();
+        if (train.navigation.destination != null || Math.abs(train.speed) >= 1e-6) return;
+        train.carriages.forEach(carriage -> carriage.forEachPresentEntity(entity -> entity.refreshPSIs()));
     }
 
     public double getCurrentSpeed() {
@@ -429,6 +460,30 @@ public final class TrainController {
         }
     }
 
+    /** Restart the configured profile, clearing recovery counters and pending trips. */
+    public void retry() {
+        checkThread();
+        if (profile == null) throw new IllegalStateException("Select an automation profile first");
+        stop();
+        profile = AutomationProfileRegistry.create(profileId);
+        start();
+    }
+
+    public void forceReturn() {
+        checkThread();
+        if (restorePending) start();
+        if (!enabled || profile == null)
+            throw new IllegalStateException("Start automation before requesting a return");
+        try {
+            profile.requestReturn(context);
+            emit(AutomationEvent.Type.AUTOMATION_STATE_CHANGED, profile.getStatus());
+            dirty.run();
+        } catch (RuntimeException e) {
+            fail(e);
+            throw e;
+        }
+    }
+
     public void stop() {
         checkThread();
         attach();
@@ -445,6 +500,7 @@ public final class TrainController {
     }
 
     private void haltOwned() {
+        trainChunks.release(controllerId);
         if (!owns()) return;
         var train = Create.RAILWAYS.trains.get(selectedTrain);
         if (train != null) {
@@ -460,6 +516,7 @@ public final class TrainController {
     }
 
     private void releaseIfIdle() {
+        if (!enabled && mode == ControlMode.IDLE) trainChunks.release(controllerId);
         if (!enabled && mode == ControlMode.IDLE && owns()) {
             actors.setPausedTypes(getSelectedTrain(), Set.of());
             manager.ownership().release(selectedTrain, controllerId);
@@ -503,6 +560,7 @@ public final class TrainController {
                 yieldToPlayer();
                 return;
             }
+            updateTrainChunks();
             if (mode == ControlMode.DIRECT_CONTROL) {
                 backend.tick(getSelectedTrain().unwrap());
                 if (!backend.isDriving(getSelectedTrain().unwrap())) {
@@ -523,6 +581,7 @@ public final class TrainController {
     public void tickActorControls(com.simibubi.create.content.trains.entity.CarriageContraptionEntity entity) {
         if (!owns()) return;
         try {
+            updateTrainChunks();
             if (enabled) profile.beforeTrainTick(context);
             actors.tickPauses(entity);
         } catch (RuntimeException e) {
@@ -550,6 +609,7 @@ public final class TrainController {
                 return;
             }
             if (train.isDerailed()) throw new IllegalStateException("Selected train is derailed");
+            updateTrainChunks();
             var station = train.unwrap().currentStation;
             if (station != null && !station.equals(lastStation)) {
                 emit(AutomationEvent.Type.TRAIN_ARRIVED, train.getCurrentStation());
@@ -592,6 +652,14 @@ public final class TrainController {
                 /* Preserve the original movement error and always release control. */
             }
         }
+    }
+
+    private void updateTrainChunks() {
+        var train = selectedTrain == null ? null : Create.RAILWAYS.trains.get(selectedTrain);
+        if (owns() && train != null && !train.invalid
+                && (enabled || mode == ControlMode.DIRECT_CONTROL || mode == ControlMode.SCHEDULE_CONTROL))
+            trainChunks.update(train, controllerId);
+        else trainChunks.release(controllerId);
     }
 
     public void fail(RuntimeException error) {

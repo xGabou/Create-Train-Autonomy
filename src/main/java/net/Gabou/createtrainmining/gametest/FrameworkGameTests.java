@@ -37,6 +37,446 @@ import java.util.*;
 @PrefixGameTestTemplate(false)
 public final class FrameworkGameTests {
     @GameTest(template = "framework_empty", timeoutTicks = 200)
+    public static void namedControllerCommandsRetryCancelAndReturn(GameTestHelper helper)
+            throws com.mojang.brigadier.exceptions.CommandSyntaxException {
+        var level = helper.getLevel();
+        var server = level.getServer();
+        var dispatcher = server.getCommands().getDispatcher();
+        var source = server.createCommandSourceStack().withLevel(level).withPermission(2);
+        var pos = helper.absolutePos(new BlockPos(1, 2, 1));
+        try (var f = new Fixture(level)) {
+            var entity = placeController(level, pos);
+            var c = entity.controller();
+            f.station("Depot", 100);
+            c.selectTrain(f.train.id);
+            c.setProfile("mining");
+            c.setConfig("return_station", "Depot");
+            String command = "trainautomation station \"Remote Quarry\" ";
+            dispatcher.execute("trainautomation name \"Remote Quarry\" at "
+                    + pos.getX() + " " + pos.getY() + " " + pos.getZ(), source);
+            var suggestions = dispatcher.getCompletionSuggestions(
+                    dispatcher.parse("trainautomation station ", source)).join();
+            helper.assertTrue(suggestions.getList().stream()
+                            .anyMatch(suggestion -> suggestion.getText().equals("\"Remote Quarry\"")),
+                    "Station suggestions must quote names containing spaces");
+            // Subsequent commands originate in another dimension, far from the controller.
+            source = source.withLevel(server.getLevel(Level.NETHER));
+            helper.assertTrue(dispatcher.execute(command + "start", source) == 1 && c.isEnabled(),
+                    "Named command must start the addressed block's configured profile");
+            for (int i = 0; i < 101; i++) c.tick();
+            helper.assertTrue(c.getStatus().equals("RECOVERING"), "Mining must enter recovery");
+            dispatcher.execute(command + "retry", source);
+            helper.assertTrue(c.getStatus().equals("MINING")
+                            && c.save().getCompound("ProfileState").getInt("ConsecutiveJams") == 0,
+                    "Retry must clear recovery and jam counters without changing configuration");
+            dispatcher.execute(command + "return", source);
+            helper.assertTrue(c.getStatus().equals("RETURNING") && c.isEnabled()
+                            && c.getControlMode() == ControlMode.SCHEDULE_CONTROL
+                            && c.save().getCompound("ProfileState").getBoolean("ReturnAfterStuck"),
+                    "Force return must use profile navigation and prevent automatic departure after unloading");
+            dispatcher.execute(command + "cancel", source);
+            helper.assertTrue(!c.isEnabled() && Math.abs(f.train.speed) < 1e-6
+                            && !c.isDirectDriving() && f.train.navigation.destination == null,
+                    "Cancel must stop movement, navigation, and automation");
+            helper.assertTrue(dispatcher.execute(command + "status", source) == 1,
+                    "Status must be available for an inactive controller");
+            helper.assertTrue(dispatcher.parse(command + "start", source.withPermission(0))
+                            .getReader().canRead(), "Remote commands must require operator permission");
+        } finally {
+            level.removeBlock(pos, false);
+        }
+        helper.succeed();
+    }
+
+    @GameTest(template = "framework_empty", timeoutTicks = 200)
+    public static void namedControllerAddressesPersistRenameAndRejectReplacement(GameTestHelper helper) {
+        var level = helper.getLevel();
+        var server = level.getServer();
+        var pos = helper.absolutePos(new BlockPos(1, 2, 1));
+        var otherPos = helper.absolutePos(new BlockPos(2, 2, 1));
+        var names = NamedControllerSavedData.get(server);
+        try {
+            var entity = placeController(level, pos);
+            var other = placeController(level, otherPos);
+            names.name("Address test", level, entity);
+            try {
+                names.name("Address test", level, other);
+                helper.fail("Duplicate names must be rejected");
+            } catch (IllegalArgumentException expected) {}
+            names.name("Renamed address", level, entity);
+            helper.assertTrue(!names.stations().containsKey("Address test"), "Rename must discard the old alias");
+            var restored = NamedControllerSavedData.load(names.save(new CompoundTag(), level.registryAccess()),
+                    level.registryAccess());
+            helper.assertTrue(restored.resolve(server, "Renamed address") == entity,
+                    "Persisted address must resolve the same dimension, position and controller identity");
+            level.removeBlock(pos, false);
+            helper.assertTrue(!names.stations().containsKey("Renamed address"),
+                    "Breaking a controller must unregister its name");
+            placeController(level, pos);
+            try {
+                restored.resolve(server, "Renamed address");
+                helper.fail("A stale name must never control a replacement block");
+            } catch (IllegalStateException expected) {}
+            helper.assertTrue(!restored.stations().containsKey("Renamed address"),
+                    "Stale addresses must be pruned after detection");
+        } finally {
+            level.removeBlock(pos, false);
+            level.removeBlock(otherPos, false);
+        }
+        helper.succeed();
+    }
+
+    private static long controllerTickets(ServerLevel level, BlockPos pos) {
+        var data = level.getDataStorage().get(net.minecraft.world.level.ForcedChunksSavedData.factory(), "chunks");
+        if (data == null) return 0;
+        long chunk = new net.minecraft.world.level.ChunkPos(pos).toLong();
+        return data.getBlockForcedChunks().getTickingChunks().values().stream()
+                .filter(chunks -> chunks.contains(chunk)).count();
+    }
+
+    private static long trainTickets(ServerLevel level, net.minecraft.world.level.ChunkPos chunk) {
+        var data = level.getDataStorage().get(net.minecraft.world.level.ForcedChunksSavedData.factory(), "chunks");
+        if (data == null) return 0;
+        return data.getEntityForcedChunks().getTickingChunks().values().stream()
+                .filter(chunks -> chunks.contains(chunk.toLong())).count();
+    }
+
+    @GameTest(template = "framework_empty", timeoutTicks = 200)
+    public static void trainFootprintMovesAndIndependentOwnersReleaseTheirTickets(GameTestHelper helper) {
+        var level = helper.getLevel();
+        var oldChunk = new net.minecraft.world.level.ChunkPos(4, 0);
+        var newChunk = new net.minecraft.world.level.ChunkPos(20, 0);
+        long baseline = trainTickets(level, oldChunk);
+        long newBaseline = trainTickets(level, newChunk);
+        try (var a = new Fixture(level); var b = new Fixture(level)) {
+            a.controller.startDriving(DriveDirection.FORWARD, .2);
+            b.controller.startDriving(DriveDirection.FORWARD, .2);
+            helper.assertTrue(trainTickets(level, oldChunk) == baseline + 2,
+                    "Each controller must own a separate train footprint, even when their chunks overlap");
+            var farther = a.connect(a.last, 512, 256, 0);
+            a.placeOn(farther, 200);
+            a.train.carriages.getFirst().updateContraptionAnchors();
+            a.controller.tickDrive();
+            helper.assertTrue(trainTickets(level, oldChunk) == baseline + 1
+                            && trainTickets(level, newChunk) == newBaseline + 1,
+                    "Moving the train must load the new footprint and release the old footprint");
+            b.controller.yieldToPlayer();
+            helper.assertTrue(trainTickets(level, oldChunk) == baseline,
+                    "Player takeover must release only that controller's train footprint");
+            a.controller.unload();
+            helper.assertTrue(trainTickets(level, newChunk) == newBaseline,
+                    "Shutdown/unload must release transient train tickets, rebuilt only on resume");
+        }
+        helper.succeed();
+    }
+
+    @GameTest(template = "framework_empty", timeoutTicks = 200)
+    public static void remoteDrillBreaksOreWithNoPlayersNearby(GameTestHelper helper) {
+        var level = helper.getLevel();
+        var f = new Fixture(level);
+        var tools = f.attachTools();
+        tools.getActors().removeIf(actor -> actor.getLeft().state().is(AllBlocks.DEPLOYER.get()));
+        var entity = ((TestCarriage) f.train.carriages.getFirst()).testEntity;
+        entity.setCarriage(f.train.carriages.getFirst());
+        entity.setPos(64, 256, 0);
+        var ore = new BlockPos(69, 257, 0);
+        f.controller.startDriving(DriveDirection.FORWARD, .2);
+        helper.runAfterDelay(5, () -> {
+            level.setBlockAndUpdate(ore, net.minecraft.world.level.block.Blocks.IRON_ORE.defaultBlockState());
+            var context = tools.getActors().getFirst().getRight();
+            context.motion = context.relativeMotion = new Vec3(.1, 0, 0);
+            context.position = Vec3.atCenterOf(ore);
+            var drill = com.simibubi.create.api.behaviour.movement.MovementBehaviour.REGISTRY
+                    .get(tools.getActors().getFirst().getLeft().state());
+            drill.startMoving(context);
+            drill.visitNewPosition(context, ore);
+            // Tick the real carriage/drill via the world's entity loop, without calling tickActors.
+            level.addFreshEntity(entity);
+        });
+        helper.runAfterDelay(45, () -> {
+            try {
+                helper.assertTrue(level.players().isEmpty()
+                                && com.simibubi.create.content.trains.entity.CarriageEntityHandler.isActiveChunk(level, ore),
+                        "Remote train and drill chunks must be entity-ticking with no nearby players");
+                helper.assertTrue(entity.tickCount > 0 && level.getBlockState(ore).isAir(),
+                        "Normal world entity ticks must let a remote Create drill finish mining ore");
+                helper.succeed();
+            } finally {
+                entity.discard();
+                level.removeBlock(ore, false);
+                f.close();
+            }
+        });
+    }
+
+    private static net.Gabou.createtrainmining.block.TrainAutomationControllerBlockEntity
+            placeController(ServerLevel level, BlockPos pos) {
+        level.setBlockAndUpdate(pos,
+                net.Gabou.createtrainmining.block.ModBlocks.CONTROLLER.get().defaultBlockState());
+        return (net.Gabou.createtrainmining.block.TrainAutomationControllerBlockEntity) level.getBlockEntity(pos);
+    }
+
+    @GameTest(template = "framework_empty", timeoutTicks = 200)
+    public static void controllerChunkTicketsReleaseAndRemainIndependent(GameTestHelper helper) {
+        var level = helper.getLevel();
+        var firstPos = helper.absolutePos(new BlockPos(2, 1, 2));
+        // Random test origins can put the first controller at a chunk boundary.
+        var secondPos = firstPos.offset((firstPos.getX() & 15) == 15 ? -1 : 1, 0, 0);
+        var first = placeController(level, firstPos);
+        var second = placeController(level, secondPos);
+        long baseline = controllerTickets(level, firstPos);
+        try (var a = new Fixture(level); var b = new Fixture(level)) {
+            var ca = first.controller();
+            var cb = second.controller();
+            ca.selectTrain(a.train.id);
+            cb.selectTrain(b.train.id);
+            ca.startDriving(DriveDirection.FORWARD, .2);
+            cb.startDriving(DriveDirection.FORWARD, .2);
+            helper.assertTrue(controllerTickets(level, firstPos) == baseline + 2,
+                    "Each active controller must own its own ticking ticket, even in the same chunk");
+            ca.stopDriving();
+            helper.assertTrue(controllerTickets(level, firstPos) == baseline + 1,
+                    "Stopping one controller must retain the other's chunk ticket");
+            cb.fail(new IllegalStateException("Test failure"));
+            helper.assertTrue(controllerTickets(level, firstPos) == baseline,
+                    "Errors must release chunk tickets immediately");
+            ca.startDriving(DriveDirection.FORWARD, .2);
+            ca.yieldToPlayer();
+            helper.assertTrue(controllerTickets(level, firstPos) == baseline,
+                    "Player takeover must release the controller's ticket");
+            ca.setProfile("mining");
+            boolean failedStart = false;
+            try { ca.start(); } catch (IllegalArgumentException expected) { failedStart = true; }
+            helper.assertTrue(failedStart && controllerTickets(level, firstPos) == baseline,
+                    "A failed profile start must not leave a forced chunk behind");
+            ca.startDriving(DriveDirection.FORWARD, .2);
+            level.removeBlock(firstPos, false);
+            helper.assertTrue(controllerTickets(level, firstPos) == baseline
+                            && !ControllerChunkLoader.isValidOwner(level, firstPos),
+                    "Removing the block must release its ticket and invalidate the saved owner");
+        } finally {
+            level.removeBlock(firstPos, false);
+            level.removeBlock(secondPos, false);
+        }
+        helper.succeed();
+    }
+
+    @GameTest(template = "framework_empty", timeoutTicks = 200)
+    public static void enabledControllerRetainsTicketAndResumesAfterReload(GameTestHelper helper) {
+        var level = helper.getLevel();
+        var pos = helper.absolutePos(new BlockPos(2, 1, 2));
+        var entity = placeController(level, pos);
+        long baseline = controllerTickets(level, pos);
+        try (var f = new Fixture(level)) {
+            f.station("Depot", 100);
+            var controller = entity.controller();
+            controller.selectTrain(f.train.id);
+            controller.setProfile("mining");
+            controller.setConfig("return_station", "Depot");
+            controller.start();
+            var saved = entity.saveWithoutMetadata(level.registryAccess());
+            entity.onChunkUnloaded();
+            helper.assertTrue(controllerTickets(level, pos) == baseline + 1
+                            && entity.shouldKeepLoaded() && ControllerChunkLoader.isValidOwner(level, pos),
+                    "An enabled profile must retain its persistent ticket while shutting down/unloading");
+            entity.loadWithComponents(saved, level.registryAccess());
+            entity.controller().tick();
+            helper.assertTrue(entity.controller().isEnabled()
+                            && entity.controller().getStatus().equals("MINING")
+                            && controllerTickets(level, pos) == baseline + 1,
+                    "Reload must resume mining without duplicating the persistent ticket");
+            entity.controller().stop();
+            helper.assertTrue(controllerTickets(level, pos) == baseline
+                            && !ControllerChunkLoader.isValidOwner(level, pos),
+                    "Stopping resumed automation must release its ticket and invalidate its owner");
+        } finally {
+            level.removeBlock(pos, false);
+        }
+        helper.succeed();
+    }
+
+    @GameTest(template = "framework_empty", timeoutTicks = 200)
+    public static void distantControllerTicksWithoutNearbyPlayers(GameTestHelper helper) {
+        var level = helper.getLevel();
+        var pos = helper.absolutePos(new BlockPos(512, 1, 512));
+        var f = new Fixture(level);
+        var entity = placeController(level, pos);
+        try {
+            f.station("Depot", 100);
+            entity.controller().selectTrain(f.train.id);
+            entity.controller().setProfile("mining");
+            entity.controller().setConfig("return_station", "Depot");
+            entity.controller().setConfig("return_threshold", "0.5");
+            entity.controller().start();
+            f.cargo.setStackInSlot(0, new ItemStack(Items.COBBLESTONE, 64));
+            f.cargo.setStackInSlot(1, new ItemStack(Items.COBBLESTONE, 64));
+            helper.runAfterDelay(40, () -> {
+                try {
+                    helper.assertTrue(level.players().isEmpty() && level.isPositionEntityTicking(pos),
+                            "The remote controller's chunk must tick without any nearby players");
+                    helper.assertTrue(entity.controller().getStatus().equals("RETURNING"),
+                            "Real remote block ticks must advance the mining workflow for full cargo");
+                    helper.succeed();
+                } finally {
+                    level.removeBlock(pos, false);
+                    f.close();
+                }
+            });
+        } catch (RuntimeException e) {
+            level.removeBlock(pos, false);
+            f.close();
+            throw e;
+        }
+    }
+
+    @GameTest(template = "framework_empty", timeoutTicks = 200)
+    public static void stuckMiningBacksUpTenBlocksAndRetries(GameTestHelper helper) {
+        try (var f = new Fixture(helper.getLevel())) {
+            f.station("Depot", 100);
+            var tools = f.attachTools();
+            f.controller.setActorTypeEnabled(ResourceLocation.parse("create:deployer"), false);
+            f.controller.setProfile("mining");
+            f.controller.setConfig("return_station", "Depot");
+            f.controller.start();
+            // Reproduce a train reporting motion while its graph position is frozen.
+            f.train.speed = .2;
+            f.train.speedBeforeStall = .2;
+            f.train.carriages.getFirst().stalled = true;
+            for (int i = 0; i < 100; i++) f.controller.tick();
+            helper.assertTrue(f.controller.getStatus().equals("MINING"),
+                    "Brief drill stalls must not trigger recovery");
+            f.controller.tick();
+            helper.assertTrue(f.controller.getStatus().equals("RECOVERING")
+                            && f.controller.getDirection() == DriveDirection.BACKWARD
+                            && !f.train.carriages.getFirst().stalled,
+                    "Frozen position must reverse and clear the actor stall regardless of reported speed");
+            helper.assertTrue(tools.getActors().stream().allMatch(a -> a.getRight().disabled),
+                    "Tools must pause during the retreat");
+            double stuckAt = f.position();
+            for (int i = 0; i < 800 && f.controller.getStatus().equals("RECOVERING"); i++) f.ticks(1);
+            helper.assertTrue(f.controller.getStatus().equals("MINING") && f.controller.isEnabled()
+                            && f.controller.getDirection() == DriveDirection.FORWARD
+                            && stuckAt - f.position() >= 10 && stuckAt - f.position() < 11,
+                    "Actual Create movement must retreat about ten blocks and automatically retry mining");
+            helper.assertTrue(f.controller.isActorTypeEnabled(ResourceLocation.parse("create:mechanical_drill"))
+                            && !f.controller.isActorTypeEnabled(ResourceLocation.parse("create:deployer")),
+                    "Retry must restore tool operation while preserving manually disabled actors");
+            f.ticks(30);
+            helper.assertTrue(f.position() > stuckAt - 10,
+                    "Retry must move back toward the mining obstruction");
+        }
+        helper.succeed();
+    }
+
+    @GameTest(template = "framework_empty", timeoutTicks = 200)
+    public static void backwardMiningRecoveryPersistsRemainingRetreat(GameTestHelper helper) {
+        try (var f = new Fixture(helper.getLevel())) {
+            f.station("Depot", 100);
+            f.controller.setProfile("mining");
+            f.controller.setConfig("return_station", "Depot");
+            f.controller.setConfig("outbound_direction", "BACKWARD");
+            f.controller.start();
+            for (int i = 0; i < 101; i++) f.controller.tick();
+            helper.assertTrue(f.controller.getDirection() == DriveDirection.FORWARD,
+                    "Backward mining must retreat in the opposite direction");
+            f.controller.tick();
+            f.controller.tickDrive();
+            f.setPosition(f.position() + 4);
+            f.controller.tick();
+            var saved = f.controller.save();
+            f.controller.unload();
+            var reloaded = new TrainController(f.level.getServer(), () -> {}, () -> 0);
+            try {
+                reloaded.load(saved);
+                reloaded.tick();
+                helper.assertTrue(reloaded.getStatus().equals("RECOVERING")
+                                && reloaded.getDirection() == DriveDirection.FORWARD,
+                        "Reload must resume recovery rather than abandoning the remaining retreat");
+                reloaded.tickDrive();
+                f.setPosition(f.position() + 5);
+                reloaded.tick();
+                helper.assertTrue(reloaded.getStatus().equals("RECOVERING"),
+                        "Recovery must not finish before its saved remaining distance is covered");
+                f.setPosition(f.position() + 1);
+                reloaded.tick();
+                helper.assertTrue(reloaded.getStatus().equals("MINING")
+                                && reloaded.getDirection() == DriveDirection.BACKWARD,
+                        "Reload must finish only the remaining six blocks and retry the configured direction");
+            } finally {
+                reloaded.stop();
+                reloaded.unload();
+            }
+        }
+        helper.succeed();
+    }
+
+    @GameTest(template = "framework_empty", timeoutTicks = 200)
+    public static void miningRecoveryIgnoresExpectedWaitsAndSlowProgress(GameTestHelper helper) {
+        try (var f = new Fixture(helper.getLevel())) {
+            f.station("Depot", 100);
+            f.controller.setProfile("mining");
+            f.controller.setConfig("return_station", "Depot");
+            f.controller.start();
+            f.train.carriageWaitingForChunks = 0;
+            for (int i = 0; i < 200; i++) f.controller.tick();
+            helper.assertTrue(f.controller.getStatus().equals("MINING"),
+                    "Unloaded chunks must not cause a retreat");
+            f.train.carriageWaitingForChunks = -1;
+            f.train.navigation.waitingForSignal = net.createmod.catnip.data.Pair.of(UUID.randomUUID(), true);
+            for (int i = 0; i < 200; i++) f.controller.tick();
+            helper.assertTrue(f.controller.getStatus().equals("MINING"),
+                    "Waiting at a signal must not cause a retreat");
+            f.train.navigation.waitingForSignal = null;
+            for (int i = 0; i < 400; i++) {
+                f.setPosition(f.position() + .01);
+                f.controller.tick();
+            }
+            helper.assertTrue(f.controller.getStatus().equals("MINING"),
+                    "Slow but sustained actual movement must reset the stall timer");
+            f.connect(f.last, 256, 240, 0);
+            f.setPosition(122);
+            f.controller.tickDrive();
+            for (int i = 0; i < 200; i++) f.controller.tick();
+            helper.assertTrue(f.controller.getStatus().equals("SLOPE_PAUSED"),
+                    "Paused mining tools on a slope must not count as actively stuck mining");
+            f.controller.stop();
+            f.setPosition(64);
+            f.controller.setConfig("mining_speed", "0");
+            f.controller.start();
+            for (int i = 0; i < 200; i++) f.controller.tick();
+            helper.assertTrue(f.controller.getStatus().equals("MINING"),
+                    "An intentional zero-speed request must not trigger recovery");
+        }
+        helper.succeed();
+    }
+
+    @GameTest(template = "framework_empty", timeoutTicks = 200)
+    public static void miningRecoveryRetriesBlockedRetreatAndStillReturnsFullCargo(GameTestHelper helper) {
+        try (var f = new Fixture(helper.getLevel())) {
+            f.station("Depot", 100);
+            f.controller.setProfile("mining");
+            f.controller.setConfig("return_station", "Depot");
+            f.controller.setConfig("return_threshold", "0.5");
+            f.controller.start();
+            for (int i = 0; i < 101; i++) f.controller.tick();
+            helper.assertTrue(f.controller.getStatus().equals("RECOVERING"), "Recovery must begin");
+            for (int i = 0; i < 101; i++) f.controller.tick();
+            helper.assertTrue(f.controller.getStatus().equals("MINING") && f.controller.isEnabled(),
+                    "If backing out is also blocked, retry mining instead of abandoning automation");
+            for (int i = 0; i < 101; i++) f.controller.tick();
+            helper.assertTrue(f.controller.getStatus().equals("RECOVERING"),
+                    "A repeated mining jam must be recoverable again");
+            f.cargo.setStackInSlot(0, new ItemStack(Items.COBBLESTONE, 64));
+            f.cargo.setStackInSlot(1, new ItemStack(Items.COBBLESTONE, 64));
+            f.controller.tick();
+            helper.assertTrue(f.controller.getStatus().equals("RETURNING")
+                            && f.controller.getControlMode() == ControlMode.SCHEDULE_CONTROL,
+                    "Full cargo during recovery must still switch to the return schedule");
+        }
+        helper.succeed();
+    }
+
+    @GameTest(template = "framework_empty", timeoutTicks = 200)
     public static void threadedTrainsTicksOnceOnServerAndKeepsSlopeProtection(GameTestHelper helper) {
         if (!net.neoforged.fml.ModList.get().isLoaded("createthreadedtrains")) {
             helper.succeed();
@@ -623,6 +1063,318 @@ public final class FrameworkGameTests {
         } finally {
             level.setBlockAndUpdate(
                     pos, net.minecraft.world.level.block.Blocks.AIR.defaultBlockState());
+        }
+        helper.succeed();
+    }
+
+    @GameTest(template = "framework_empty", timeoutTicks = 200)
+    public static void miningUnloadInactivityRetainsRailsAndRespectsResumePolicy(GameTestHelper helper) {
+        for (int policy = 0; policy < 3; policy++) {
+            try (var f = new Fixture(helper.getLevel())) {
+                f.station("Depot", 100);
+                f.controller.setProfile("mining");
+                f.controller.setConfig("return_station", "Depot");
+                f.controller.setConfig("return_threshold", "0.5");
+                f.controller.setConfig("automatic_resume", Boolean.toString(policy != 1));
+                f.controller.start();
+                f.cargo.setStackInSlot(0, new ItemStack(Items.RAIL, 64));
+                f.cargo.setStackInSlot(1, new ItemStack(Items.COBBLESTONE, 64));
+                f.controller.tick();
+                f.train.setCurrentStation(f.graph.getPoints(EdgePointType.STATION).iterator().next());
+                f.controller.tick();
+                f.cargo.setStackInSlot(1, ItemStack.EMPTY);
+                f.controller.tick();
+                var saved = f.controller.save();
+                long now = f.level.getGameTime();
+                helper.assertTrue(f.controller.getStatus().equals("UNLOADING")
+                                && f.controller.getInventoryUsage() > .05
+                                && saved.getCompound("ProfileState").getLong("UnloadIdleUntil") == now + 6000,
+                        "Retained rails must allow a full five-minute inactivity wait above the threshold");
+
+                // Exercise the deadline boundary without waiting 6,000 real server ticks.
+                f.controller.unload();
+                saved.getCompound("ProfileState").putLong("UnloadIdleUntil", now + 1);
+                f.controller.load(saved);
+                f.controller.tick();
+                helper.assertTrue(f.controller.getStatus().equals("UNLOADING")
+                                && f.controller.save().getCompound("ProfileState").getLong("UnloadIdleUntil") == now + 1,
+                        "Reload must preserve the deadline and must not depart before it expires");
+
+                saved = f.controller.save();
+                f.controller.unload();
+                saved.getCompound("ProfileState").putLong("UnloadIdleUntil", now);
+                // A same-count replacement in an external handler is still cargo activity.
+                f.cargo.setStackInSlot(0, new ItemStack(Items.POWERED_RAIL, 64));
+                f.controller.load(saved);
+                f.controller.tick();
+                helper.assertTrue(f.controller.getStatus().equals("UNLOADING")
+                                && f.controller.save().getCompound("ProfileState").getLong("UnloadIdleUntil") == now + 6000,
+                        "Cargo activity at the deadline must reset the full wait, including equal-count swaps");
+
+                saved = f.controller.save();
+                f.controller.unload();
+                // Saves from before inactivity tracking receive a fresh five-minute wait.
+                saved.getCompound("ProfileState").remove("UnloadIdleUntil");
+                saved.getCompound("ProfileState").remove("UnloadCargoSnapshot");
+                f.controller.load(saved);
+                f.controller.tick();
+                helper.assertTrue(f.controller.getStatus().equals("UNLOADING")
+                                && f.controller.save().getCompound("ProfileState").getLong("UnloadIdleUntil") == now + 6000,
+                        "Older unloading saves must initialize the inactivity timer safely");
+
+                saved = f.controller.save();
+                f.controller.unload();
+                saved.getCompound("ProfileState").putLong("UnloadIdleUntil", now);
+                saved.getCompound("ProfileState").putBoolean("ReturnAfterStuck", policy == 2);
+                f.controller.load(saved);
+                f.controller.tick();
+                f.controller.tick();
+                helper.assertTrue(policy == 0
+                                ? f.controller.getStatus().equals("MINING") && f.controller.isDirectDriving()
+                                : !f.controller.isEnabled(),
+                        "Idle completion must honor automatic resume and the repeated-jam stop policy");
+                helper.assertTrue(f.cargo.getStackInSlot(0).getCount() == 64,
+                        "Completing unloading must retain the supplies aboard");
+            }
+        }
+        helper.succeed();
+    }
+
+    @GameTest(template = "framework_empty", timeoutTicks = 200)
+    public static void miningDockingPreservesPortableInterfaceAndOffloadsCargo(GameTestHelper helper) {
+        var level = helper.getLevel();
+        var basePos = helper.absolutePos(new BlockPos(2, 1, 2));
+        try (var f = new Fixture(level)) {
+            f.station("Depot", 100);
+            var tools = f.attachTools();
+            var entity = ((TestCarriage) f.train.carriages.getFirst()).testEntity;
+            entity.setCarriage(f.train.carriages.getFirst());
+            var psiState = AllBlocks.PORTABLE_STORAGE_INTERFACE.getDefaultState()
+                    .setValue(com.simibubi.create.content.contraptions.actors.psi.PortableStorageInterfaceBlock.FACING,
+                            Direction.EAST);
+            var info = new StructureBlockInfo(BlockPos.ZERO, psiState, new CompoundTag());
+            var psiContext = new MovementContext(level, info, tools);
+            tools.getActors().add(MutablePair.of(info, psiContext));
+            f.controller.setProfile("mining");
+            f.controller.setConfig("return_station", "Depot");
+            f.controller.setConfig("return_threshold", "0.5");
+            f.controller.start();
+            f.cargo.setStackInSlot(0, new ItemStack(Items.COBBLESTONE, 64));
+            f.cargo.setStackInSlot(1, new ItemStack(Items.COBBLESTONE, 64));
+            f.controller.tick();
+            helper.assertTrue(f.controller.getStatus().equals("RETURNING")
+                            && tools.getActors().subList(0, 2).stream().allMatch(a -> a.getRight().disabled)
+                            && !psiContext.disabled && tools.getDisabledActors().isEmpty(),
+                    "Return must pause only drills/deployers without changing saved filters or disabling PSI");
+            // Run real Create navigation up to arrival, before the profile's docking callback.
+            for (int i = 0; i < 1500 && f.train.getCurrentStation() == null; i++) {
+                f.train.earlyTick(level);
+                f.train.tick(level);
+            }
+            helper.assertTrue(f.train.getCurrentStation() != null && Math.abs(f.position() - 100) < .5,
+                    "The return schedule must reach the station completely");
+            level.setBlockAndUpdate(basePos, psiState.setValue(
+                    com.simibubi.create.content.contraptions.actors.psi.PortableStorageInterfaceBlock.FACING,
+                    Direction.WEST));
+            var base = (com.simibubi.create.content.contraptions.actors.psi.PortableStorageInterfaceBlockEntity)
+                    level.getBlockEntity(basePos);
+            psiContext.rotation = v -> v;
+            psiContext.position = Vec3.atCenterOf(basePos.relative(Direction.WEST));
+            psiContext.motion = Vec3.ZERO;
+            var behavior = com.simibubi.create.api.behaviour.movement.MovementBehaviour.REGISTRY.get(psiState);
+            behavior.visitNewPosition(psiContext, BlockPos.containing(psiContext.position));
+            helper.assertTrue(psiContext.data.contains("WorkingPos"), "Aligned PSI must find its base-side interface");
+            f.controller.tick();
+            helper.assertTrue(f.controller.getStatus().equals("UNLOADING")
+                            && psiContext.data.contains("WorkingPos") && !psiContext.disabled,
+                    "Holding at the station must preserve the PSI connection rather than cancel its stall");
+            var saved = f.controller.save();
+            f.controller.unload();
+            helper.assertTrue(!psiContext.data.contains("WorkingPos"),
+                    "Create's shutdown cleanup clears the transient interface connection");
+            f.controller.load(saved);
+            f.controller.tick();
+            helper.assertTrue(f.controller.getStatus().equals("UNLOADING")
+                            && psiContext.data.contains("WorkingPos"),
+                    "Resuming unloading must rediscover the stationary PSI even without train movement");
+            for (int i = 0; i < 20; i++) {
+                behavior.tick(psiContext);
+                base.tick();
+            }
+            var handler = level.getCapability(net.neoforged.neoforge.capabilities.Capabilities.ItemHandler.BLOCK,
+                    basePos, Direction.DOWN);
+            helper.assertTrue(base.canTransfer() && handler != null,
+                    "Base-side interface must activate and expose the train cargo");
+            int extracted = 0;
+            for (int slot = 0; slot < handler.getSlots(); slot++) extracted += handler.extractItem(slot, 64, false).getCount();
+            helper.assertTrue(extracted == 128 && f.controller.getInventoryUsage() == 0,
+                    "Actual base-side capability extraction must offload the mounted train inventory");
+            f.controller.tick();
+            f.controller.tick();
+            helper.assertTrue(f.controller.getStatus().equals("MINING")
+                            && tools.getActors().subList(0, 2).stream().noneMatch(a -> a.getRight().disabled),
+                    "Normal automatic resume must restore tools after unloading");
+        } finally {
+            level.removeBlock(basePos, false);
+        }
+        helper.succeed();
+    }
+
+    @GameTest(template = "framework_empty", timeoutTicks = 200)
+    public static void nonMiningToolPauseCanBeDisabledAndRestoresManualFilters(GameTestHelper helper) {
+        for (boolean pause : List.of(true, false)) {
+            try (var f = new Fixture(helper.getLevel())) {
+                f.station("Depot", 100);
+                var tools = f.attachTools();
+                f.controller.setActorTypeEnabled(ResourceLocation.parse("create:deployer"), false);
+                f.controller.setProfile("mining");
+                f.controller.setConfig("return_station", "Depot");
+                f.controller.setConfig("pause_tools_when_not_mining", Boolean.toString(pause));
+                f.controller.setConfig("return_threshold", "0.5");
+                f.controller.start();
+                f.cargo.setStackInSlot(0, new ItemStack(Items.COBBLESTONE, 64));
+                f.cargo.setStackInSlot(1, new ItemStack(Items.COBBLESTONE, 64));
+                f.controller.tick();
+                helper.assertTrue(tools.getActors().getFirst().getRight().disabled == pause
+                                && tools.getActors().getLast().getRight().disabled,
+                        "The idle pause toggle must control drills and respect manually disabled deployers");
+                tools = f.attachTools();
+                f.controller.tickActorControls(((TestCarriage) f.train.carriages.getFirst()).testEntity);
+                helper.assertTrue(tools.getActors().stream().allMatch(a -> a.getRight().disabled == pause),
+                        "Newly loaded carriages must receive the non-mining pause");
+                f.controller.stop();
+                helper.assertTrue(tools.getActors().stream().noneMatch(a -> a.getRight().disabled),
+                        "Stopping automation must release its temporary actor overrides");
+            }
+        }
+        helper.succeed();
+    }
+
+    @GameTest(template = "framework_empty", timeoutTicks = 200)
+    public static void repeatedJamsWaitTenMinutesPersistAndReturnWithoutRestarting(GameTestHelper helper) {
+        for (DriveDirection direction : DriveDirection.values()) {
+            try (var f = new Fixture(helper.getLevel())) {
+                f.station("Depot", 100);
+                var tools = f.attachTools();
+                f.controller.setProfile("mining");
+                f.controller.setConfig("return_station", "Depot");
+                f.controller.setConfig("outbound_direction", direction.name());
+                f.controller.start();
+                for (int jam = 1; jam <= 4; jam++) {
+                    for (int i = 0; i < 101; i++) f.controller.tick();
+                    helper.assertTrue(f.controller.save().getCompound("ProfileState").getInt("ConsecutiveJams") == jam,
+                            "Replaying the retreat must not clear the consecutive jam count");
+                    if (jam == 4) break;
+                    helper.assertTrue(f.controller.getStatus().equals("RECOVERING"),
+                            "The first three jams must retain normal recovery");
+                    f.controller.tickDrive();
+                    f.controller.tick();
+                    f.setPosition(f.position() - direction.sign() * 10);
+                    f.controller.tick();
+                    f.controller.tickDrive();
+                    f.controller.tick();
+                    f.setPosition(f.position() + direction.sign() * 10);
+                    f.controller.tick();
+                }
+                var saved = f.controller.save();
+                long deadline = saved.getCompound("ProfileState").getLong("StuckReturnAt");
+                helper.assertTrue(f.controller.getStatus().equals("STUCK_WAITING")
+                                && !f.controller.isDirectDriving() && f.train.speed == 0
+                                && tools.getActors().stream().allMatch(a -> a.getRight().disabled)
+                                && deadline == f.level.getGameTime() + 12000,
+                        "Fourth consecutive jam must pause mining/tools for ten game minutes");
+                f.controller.unload();
+                var reloaded = new TrainController(f.level.getServer(), () -> {}, () -> 0);
+                try {
+                    reloaded.load(saved);
+                    reloaded.tick();
+                    helper.assertTrue(reloaded.getStatus().equals("STUCK_WAITING")
+                                    && reloaded.save().getCompound("ProfileState").getLong("StuckReturnAt") == deadline,
+                            "Reload must preserve the pending return rather than retry mining or restart the timer");
+                    reloaded.unload();
+                    // Advance the saved deadline rather than the world's clock or waiting 12,000 real ticks.
+                    saved.getCompound("ProfileState").putLong("StuckReturnAt", f.level.getGameTime());
+                    reloaded.load(saved);
+                    reloaded.tick();
+                    helper.assertTrue(reloaded.getStatus().equals("RETURNING")
+                                    && reloaded.getControlMode() == ControlMode.SCHEDULE_CONTROL,
+                            "Expired timeout must navigate home even with empty cargo");
+                    for (int i = 0; i < 1500 && reloaded.isEnabled(); i++) {
+                        f.train.earlyTick(f.level);
+                        f.train.tick(f.level);
+                        reloaded.tick();
+                    }
+                    helper.assertTrue(!reloaded.isEnabled() && reloaded.getCurrentStation().equals("Depot"),
+                            "A train sent home after repeated jams must stay at base despite automatic resume");
+                } finally {
+                    reloaded.stop();
+                    reloaded.unload();
+                }
+            }
+        }
+        helper.succeed();
+    }
+
+    @GameTest(template = "framework_empty", timeoutTicks = 200)
+    public static void miningBeyondJamClearsTheConsecutiveStreak(GameTestHelper helper) {
+        try (var f = new Fixture(helper.getLevel())) {
+            f.station("Depot", 100);
+            f.controller.setProfile("mining");
+            f.controller.setConfig("return_station", "Depot");
+            f.controller.start();
+            for (int i = 0; i < 101; i++) f.controller.tick();
+            f.controller.tickDrive();
+            f.controller.tick();
+            f.setPosition(f.position() - 10);
+            f.controller.tick();
+            f.controller.tickDrive();
+            f.controller.tick();
+            f.setPosition(f.position() + 10.5);
+            f.controller.tick();
+            helper.assertTrue(f.controller.save().getCompound("ProfileState").getInt("ConsecutiveJams") == 0,
+                    "A successful advance past the obstruction must reset consecutive jams");
+            for (int i = 0; i < 101; i++) f.controller.tick();
+            helper.assertTrue(f.controller.save().getCompound("ProfileState").getInt("ConsecutiveJams") == 1
+                            && f.controller.getStatus().equals("RECOVERING"),
+                    "A later unrelated jam must get a fresh recovery streak");
+        }
+        helper.succeed();
+    }
+
+    @GameTest(template = "framework_empty", timeoutTicks = 100)
+    public static void stationRadiusPausesOnlyDeployersAndLavaClearingPreservesSolids(GameTestHelper helper) {
+        try (var f = new Fixture(helper.getLevel())) {
+            f.station("Depot", 70);
+            Create.RAILWAYS.trackNetworks.put(f.graph.id, f.graph);
+            var tools = f.attachTools();
+            var entity = ((TestCarriage) f.train.carriages.getFirst()).testEntity;
+            entity.setPos(10, 0, 0);
+            try {
+                f.controller.setProfile("mining");
+                f.controller.setConfig("return_station", "Depot");
+                f.controller.setConfig("pause_deployers_near_stations", "true");
+                f.controller.start();
+                helper.assertTrue(!f.controller.isActorTypeEnabled(ResourceLocation.parse("create:deployer"))
+                                && f.controller.isActorTypeEnabled(ResourceLocation.parse("create:mechanical_drill")),
+                        "Near stations only deployers must pause");
+                entity.setPos(150, 0, 0);
+                f.controller.tickDrive();
+                helper.assertTrue(f.controller.isActorTypeEnabled(ResourceLocation.parse("create:deployer")),
+                        "Deployers must resume outside station radius");
+                var pos = helper.absolutePos(new BlockPos(2, 2, 2));
+                tools.getActors().getFirst().getRight().position = Vec3.atCenterOf(pos);
+                f.level.setBlock(pos, net.minecraft.world.level.block.Blocks.LAVA.defaultBlockState(), 2);
+                f.level.setBlock(pos.east(), net.minecraft.world.level.block.Blocks.STONE.defaultBlockState(), 2);
+                f.level.setBlock(pos.west(), net.minecraft.world.level.block.Blocks.WATER.defaultBlockState(), 2);
+                f.controller.tickDrive();
+                helper.assertTrue(f.level.getBlockState(pos).isAir()
+                                && f.level.getBlockState(pos.east()).is(net.minecraft.world.level.block.Blocks.STONE)
+                                && f.level.getBlockState(pos.west()).is(net.minecraft.world.level.block.Blocks.WATER),
+                        "Lava clearing must preserve adjacent water and stone");
+            } finally {
+                entity.discard();
+                Create.RAILWAYS.trackNetworks.remove(f.graph.id);
+            }
         }
         helper.succeed();
     }

@@ -29,4 +29,5 @@ public final class TrainActions {
     public static TrainAction setActorState(ResourceLocation type, boolean enabled) {
         return c -> c.controller().setActorTypeEnabled(type, enabled);
     }
+
 }

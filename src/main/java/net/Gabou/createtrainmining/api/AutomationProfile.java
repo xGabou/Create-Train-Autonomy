@@ -19,6 +19,11 @@ public interface AutomationProfile {
 
     default void onInventoryChanged(AutomationContext context) {}
 
+    /** Optional operator request; profiles retain responsibility for their return workflow. */
+    default void requestReturn(AutomationContext context) {
+        throw new IllegalStateException("This automation profile does not support returning");
+    }
+
     CompoundTag serializeState();
 
     void deserializeState(CompoundTag state);
